@@ -50,6 +50,7 @@ public class XPipeline : RenderPipeline
         var drawSetting = new DrawRendererSettings(
             camera,new ShaderPassName("SRPDefaultUnlit")
             ) ;
+        drawSetting.flags = DrawRendererFlags.EnableDynamicBatching;  //动态合批
         drawSetting.sorting.flags = SortFlags.CommonOpaque;
         var filterSettings = new FilterRenderersSettings(true)
         {
