@@ -14,6 +14,14 @@ public class XPipeline : RenderPipeline
     };
 
     Material errorMaterial;
+    DrawRendererFlags drawFlags;
+    public  XPipeline(bool dynamicBatching)
+    {
+        if (dynamicBatching)
+        {
+            drawFlags = DrawRendererFlags.EnableDynamicBatching;
+        }
+    }
     public override void Render(ScriptableRenderContext renderContext, Camera[] cameras)
     {
         base.Render(renderContext, cameras);
@@ -50,7 +58,7 @@ public class XPipeline : RenderPipeline
         var drawSetting = new DrawRendererSettings(
             camera,new ShaderPassName("SRPDefaultUnlit")
             ) ;
-        drawSetting.flags = DrawRendererFlags.EnableDynamicBatching;  //动态合批
+        drawSetting.flags = drawFlags;   //DrawRendererFlags.EnableDynamicBatching;  //动态合批
         drawSetting.sorting.flags = SortFlags.CommonOpaque;
         var filterSettings = new FilterRenderersSettings(true)
         {
