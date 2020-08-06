@@ -15,11 +15,16 @@ public class XPipeline : RenderPipeline
 
     Material errorMaterial;
     DrawRendererFlags drawFlags;
-    public  XPipeline(bool dynamicBatching)
+    public  XPipeline(bool dynamicBatching,bool instancing)
     {
         if (dynamicBatching)
         {
             drawFlags = DrawRendererFlags.EnableDynamicBatching;
+        }
+
+        if (instancing)
+        {
+            drawFlags |= DrawRendererFlags.EnableInstancing;
         }
     }
     public override void Render(ScriptableRenderContext renderContext, Camera[] cameras)

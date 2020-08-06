@@ -6,8 +6,10 @@ public class XPipelineAsset : RenderPipelineAsset
 {
     [SerializeField]
     bool dynamicBatching = true;
+    [SerializeField]
+    bool instancing;
     protected override IRenderPipeline InternalCreatePipeline()
     {
-        return new XPipeline(dynamicBatching);
+        return new XPipeline(dynamicBatching,instancing);
     }
 }

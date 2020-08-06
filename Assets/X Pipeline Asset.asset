@@ -13,3 +13,4 @@ MonoBehaviour:
   m_Name: X Pipeline Asset
   m_EditorClassIdentifier: 
   dynamicBatching: 1
+  instancing: 1
