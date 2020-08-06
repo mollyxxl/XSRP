@@ -21,10 +21,12 @@ public class XPipeline : RenderPipeline
     static int visiableLightColorsId = Shader.PropertyToID("_VisibleLightColors");
     static int visiableLightDirectionsOrPositionsId = Shader.PropertyToID("_VisibleLightDirectionsOrPositions");
     static int visiableLightAttenuationsId = Shader.PropertyToID("_VisiableLightAttenuations");
+    static int visiableLightSpotDirectionsId = Shader.PropertyToID("_VisiableLightSpotDirections");
 
     Vector4[] visiableLightColors = new Vector4[maxVisiableLights];
     Vector4[] visiableLightDirectionsOrPositions = new Vector4[maxVisiableLights];
     Vector4[] visiableLightAttenuations = new Vector4[maxVisiableLights];
+    Vector4[] visiableLightSpotDirections = new Vector4[maxVisiableLights];
 
     public  XPipeline(bool dynamicBatching,bool instancing)
     {
@@ -75,14 +77,19 @@ public class XPipeline : RenderPipeline
         cameraBuffer.SetGlobalVectorArray(visiableLightColorsId, visiableLightColors);
         cameraBuffer.SetGlobalVectorArray(visiableLightDirectionsOrPositionsId, visiableLightDirectionsOrPositions);
         cameraBuffer.SetGlobalVectorArray(visiableLightAttenuationsId, visiableLightAttenuations);
+        cameraBuffer.SetGlobalVectorArray(visiableLightSpotDirectionsId, visiableLightSpotDirections);
 
         context.ExecuteCommandBuffer(cameraBuffer);
-        cameraBuffer.Clear(); 
+        cameraBuffer.Clear();
 
         var drawSetting = new DrawRendererSettings(
-            camera,new ShaderPassName("SRPDefaultUnlit")
-            ) ;
-        drawSetting.flags = drawFlags;   //DrawRendererFlags.EnableDynamicBatching;  //动态合批
+            camera, new ShaderPassName("SRPDefaultUnlit")
+            )
+        {
+            flags = drawFlags,
+            rendererConfiguration = RendererConfiguration.PerObjectLightIndices8
+        } ;
+        //drawSetting.flags = drawFlags;   //DrawRendererFlags.EnableDynamicBatching;  //动态合批
         drawSetting.sorting.flags = SortFlags.CommonOpaque;
         var filterSettings = new FilterRenderersSettings(true)
         {
@@ -127,8 +134,7 @@ public class XPipeline : RenderPipeline
     /// </summary>
     void ConfigureLights()
     {
-        int i = 0;
-        for (; i < cull.visibleLights.Count; i++)
+        for (int i = 0; i < cull.visibleLights.Count; i++)
         {
             if (i == maxVisiableLights)   //最多光源数量，超过的忽略不再处理
                 break;
@@ -137,6 +143,7 @@ public class XPipeline : RenderPipeline
             visiableLightColors[i] = light.finalColor;
 
             Vector4 attenuation = Vector4.zero;
+            attenuation.w = 1f;  //不影响其他光源类型
             if (light.lightType == LightType.Directional)
             {
                 Vector4 v = light.localToWorld.GetColumn(2);
@@ -150,14 +157,25 @@ public class XPipeline : RenderPipeline
                 //光源的位置
                 visiableLightDirectionsOrPositions[i] = light.localToWorld.GetColumn(3);
                 attenuation.x = 1f / Mathf.Max(light.range * light.range, 0.00001f);
+
+                if (light.lightType == LightType.Spot)
+                {
+                    Vector4 v = light.localToWorld.GetColumn(2);
+                    v.x = -v.x;
+                    v.y = -v.y;
+                    v.z = -v.z;
+                    visiableLightSpotDirections[i] = v;
+
+                    float outerRad = Mathf.Deg2Rad * 0.5f * light.spotAngle;
+                    float outerCos = Mathf.Cos(outerRad);
+                    float outerTan = Mathf.Tan(outerRad);
+                    float innerCos = Mathf.Cos(Mathf.Atan((46f / 64f) * outerTan));
+                    float angleRange = Mathf.Max(innerCos - outerCos, 0.0001f);
+                    attenuation.z = 1f / angleRange;
+                    attenuation.w = -outerCos * attenuation.z;
+                }
             }
             visiableLightAttenuations[i] = attenuation;
-        }
-        //当光源数量改变时，清理不使用的光源信息
-        for (; i < maxVisiableLights; i++)
-        {
-            visiableLightColors[i] = Color.clear;
-            visiableLightDirectionsOrPositions[i] = Vector4.zero;
         }
     }
 }
