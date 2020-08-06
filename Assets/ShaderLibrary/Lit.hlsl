@@ -90,9 +90,14 @@ float4 LitPassFragment(VertexOutput input):SV_TARGET
 
 	//for(int i=0;i<MAX_VISIABLE_LIGHTS;i++)
 	//根据Light indices进行循环
-	for(int i=0;i<unity_LightIndicesOffsetAndCount.y;i++)
+	for(int i=0;i<min(unity_LightIndicesOffsetAndCount.y,4);i++)
 	{
 		int lightIndex=unity_4LightIndices0[i];//限制4盏灯，所以只需要unity_4LightIndices0即可
+		diffuseLight+=DiffuseLight(lightIndex,input.normal,input.worldPos);
+	}
+	for(int i=4;i<min(unity_LightIndicesOffsetAndCount.y,4);i++)
+	{
+		int lightIndex=unity_4LightIndices1[i-4];//限制8盏灯，需要unity_4LightIndices1
 		diffuseLight+=DiffuseLight(lightIndex,input.normal,input.worldPos);
 	}
 
