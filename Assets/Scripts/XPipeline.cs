@@ -15,8 +15,21 @@ public class XPipeline : RenderPipeline
 
     Material errorMaterial;
     DrawRendererFlags drawFlags;
+
+    //Light
+    const int maxVisiableLights = 4;
+    static int visiableLightColorsId = Shader.PropertyToID("_VisibleLightColors");
+    static int visiableLightDirectionsOrPositionsId = Shader.PropertyToID("_VisibleLightDirectionsOrPositions");
+    static int visiableLightAttenuationsId = Shader.PropertyToID("_VisiableLightAttenuations");
+
+    Vector4[] visiableLightColors = new Vector4[maxVisiableLights];
+    Vector4[] visiableLightDirectionsOrPositions = new Vector4[maxVisiableLights];
+    Vector4[] visiableLightAttenuations = new Vector4[maxVisiableLights];
+
     public  XPipeline(bool dynamicBatching,bool instancing)
     {
+        GraphicsSettings.lightsUseLinearIntensity = true;
+         
         if (dynamicBatching)
         {
             drawFlags = DrawRendererFlags.EnableDynamicBatching;
@@ -57,6 +70,12 @@ public class XPipeline : RenderPipeline
             (clearFlags&CameraClearFlags.Depth) !=0, 
             (clearFlags&CameraClearFlags.Color) !=0,
             camera.backgroundColor);
+        //光照信息
+        ConfigureLights();
+        cameraBuffer.SetGlobalVectorArray(visiableLightColorsId, visiableLightColors);
+        cameraBuffer.SetGlobalVectorArray(visiableLightDirectionsOrPositionsId, visiableLightDirectionsOrPositions);
+        cameraBuffer.SetGlobalVectorArray(visiableLightAttenuationsId, visiableLightAttenuations);
+
         context.ExecuteCommandBuffer(cameraBuffer);
         cameraBuffer.Clear(); 
 
@@ -102,5 +121,43 @@ public class XPipeline : RenderPipeline
 
         var filterSettings = new FilterRenderersSettings(true);
         context.DrawRenderers(cull.visibleRenderers, ref drawSettings, filterSettings);
+    }
+    /// <summary>
+    /// 初始化光照相关信息
+    /// </summary>
+    void ConfigureLights()
+    {
+        int i = 0;
+        for (; i < cull.visibleLights.Count; i++)
+        {
+            if (i == maxVisiableLights)   //最多光源数量，超过的忽略不再处理
+                break;
+
+            var light = cull.visibleLights[i];
+            visiableLightColors[i] = light.finalColor;
+
+            Vector4 attenuation = Vector4.zero;
+            if (light.lightType == LightType.Directional)
+            {
+                Vector4 v = light.localToWorld.GetColumn(2);
+                v.x = -v.x;
+                v.y = -v.y;
+                v.z = -v.z;
+                visiableLightDirectionsOrPositions[i] = v;
+            }
+            else
+            {
+                //光源的位置
+                visiableLightDirectionsOrPositions[i] = light.localToWorld.GetColumn(3);
+                attenuation.x = 1f / Mathf.Max(light.range * light.range, 0.00001f);
+            }
+            visiableLightAttenuations[i] = attenuation;
+        }
+        //当光源数量改变时，清理不使用的光源信息
+        for (; i < maxVisiableLights; i++)
+        {
+            visiableLightColors[i] = Color.clear;
+            visiableLightDirectionsOrPositions[i] = Vector4.zero;
+        }
     }
 }
