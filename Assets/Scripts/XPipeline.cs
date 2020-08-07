@@ -12,6 +12,9 @@ public class XPipeline : RenderPipeline
     {
         name = "Render Camera"
     };
+    CommandBuffer shadowBuffer = new CommandBuffer() { 
+        name = "Render Shadows"
+    };
 
     Material errorMaterial;
     DrawRendererFlags drawFlags;
@@ -23,11 +26,16 @@ public class XPipeline : RenderPipeline
     static int visiableLightAttenuationsId = Shader.PropertyToID("_VisiableLightAttenuations");
     static int visiableLightSpotDirectionsId = Shader.PropertyToID("_VisiableLightSpotDirections");
     static int lightIndicesOffsetAndCountID = Shader.PropertyToID("unity_LightIndicesOffsetAndCount");
+    static int shadowMapId = Shader.PropertyToID("_ShadowMap");
+    static int worldToShadowMatrixId = Shader.PropertyToID("_WorldToShadowMatrix");
 
     Vector4[] visiableLightColors = new Vector4[maxVisiableLights];
     Vector4[] visiableLightDirectionsOrPositions = new Vector4[maxVisiableLights];
     Vector4[] visiableLightAttenuations = new Vector4[maxVisiableLights];
     Vector4[] visiableLightSpotDirections = new Vector4[maxVisiableLights];
+
+    //SpotLight Shadows
+    RenderTexture shadowMap;
 
     public  XPipeline(bool dynamicBatching,bool instancing)
     {
@@ -66,6 +74,13 @@ public class XPipeline : RenderPipeline
 #endif
         CullResults.Cull(ref cullingParameters, context,ref cull);
 
+        if (camera.cameraType == CameraType.Game)   //SceneView 光源个数有点问题
+        {
+            //阴影贴图是在常规场景之前渲染的，所以在渲染之前调用渲染阴影，但是在剔除之后
+            if (cull.visibleLights.Count > 0)
+                RenderShadows(context);
+        }
+        
         context.SetupCameraProperties(camera);  //设置视图投影矩阵
 
         CameraClearFlags clearFlags = camera.clearFlags;
@@ -120,6 +135,13 @@ public class XPipeline : RenderPipeline
         DrawDefaultPipeline(context, camera);
         
         context.Submit();
+
+        //提交上下文之后，释放渲染纹理
+        if (shadowMap) {
+            RenderTexture.ReleaseTemporary(shadowMap);
+            shadowMap = null;
+        }
+
     }
     [Conditional("DEVELOPMENT_BUILD"),Conditional("UNITY_EDITOR")]
      void DrawDefaultPipeline(ScriptableRenderContext context, Camera camera)
@@ -204,4 +226,50 @@ public class XPipeline : RenderPipeline
             cull.SetLightIndexMap(lightIndices);
         }
     }
+    void RenderShadows(ScriptableRenderContext context)
+    {
+        shadowMap = RenderTexture.GetTemporary(512, 512, 16, RenderTextureFormat.Shadowmap);
+        shadowMap.filterMode = FilterMode.Bilinear;
+        shadowMap.wrapMode = TextureWrapMode.Clamp;
+
+        CoreUtils.SetRenderTarget(shadowBuffer, shadowMap,
+            RenderBufferLoadAction.DontCare,RenderBufferStoreAction.Store,
+            ClearFlag.Depth);
+
+        shadowBuffer.BeginSample("Render Shadows");
+        context.ExecuteCommandBuffer(shadowBuffer);
+        shadowBuffer.Clear();
+
+        Matrix4x4 viewMatrix, projectionMatrix;
+        ShadowSplitData splitData;
+        cull.ComputeSpotShadowMatricesAndCullingPrimitives(
+           0, out viewMatrix, out projectionMatrix, out splitData
+            );
+        shadowBuffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
+        context.ExecuteCommandBuffer(shadowBuffer);
+        shadowBuffer.Clear();
+
+        var shadowSetting = new DrawShadowsSettings(cull, cull.visibleLights.Count-1);
+         context.DrawShadows(ref shadowSetting);
+
+        if (SystemInfo.usesReversedZBuffer)
+        {
+            projectionMatrix.m20 = -projectionMatrix.m20;
+            projectionMatrix.m21 = -projectionMatrix.m21;
+            projectionMatrix.m22 = -projectionMatrix.m22;
+            projectionMatrix.m23 = -projectionMatrix.m23;
+        }
+        var scaleOffset = Matrix4x4.identity;
+        scaleOffset.m00 = scaleOffset.m11 = scaleOffset.m22 = 0.5f;
+        scaleOffset.m03 = scaleOffset.m13 = scaleOffset.m23 = 0.5f;
+
+        Matrix4x4 worldToShadowMatrix =scaleOffset*(projectionMatrix * viewMatrix);
+        shadowBuffer.SetGlobalMatrix(worldToShadowMatrixId, worldToShadowMatrix);
+        shadowBuffer.SetGlobalTexture(shadowMapId, shadowMap);
+
+        shadowBuffer.EndSample("Render Shadows");
+        context.ExecuteCommandBuffer(shadowBuffer);
+        shadowBuffer.Clear();
+    }
+
 }

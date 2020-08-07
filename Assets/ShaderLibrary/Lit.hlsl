@@ -30,7 +30,21 @@ CBUFFER_START(_LightBuffer)
 	float4 _VisiableLightSpotDirections[MAX_VISIABLE_LIGHTS];
 CBUFFER_END
 
-float3 DiffuseLight(int index,float3 normal,float3 worldPos)
+CBUFFER_START(_ShadowBuffer)
+	float4x4 _WorldToShadowMatrix;
+CBUFFER_END
+
+TEXTURE2D_SHADOW(_ShadowMap);
+SAMPLER_CMP(sampler_ShadowMap);
+
+float ShadowAttenuation(float3 worldPos)
+{
+	float4 shadowPos=mul(_WorldToShadowMatrix,float4(worldPos,1.0));
+	shadowPos.xyz/=shadowPos.w;
+	return SAMPLE_TEXTURE2D_SHADOW(_ShadowMap,sampler_ShadowMap,shadowPos.xyz);
+}
+
+float3 DiffuseLight(int index,float3 normal,float3 worldPos,float shadowAttenuation)
 {
 	float3 lightColor=_VisibleLightColors[index].rgb;
 	float4 lightPositionOrDirection=_VisibleLightDirectionsOrPositions[index];
@@ -51,7 +65,7 @@ float3 DiffuseLight(int index,float3 normal,float3 worldPos)
 	spotFade*=spotFade;
 
 	float distanceSqr=max(dot(lightVector,lightVector),0.00001);
-	diffuse *= spotFade*rangeFade/distanceSqr;
+	diffuse *= shadowAttenuation*spotFade*rangeFade/distanceSqr;
 
 	return diffuse*lightColor;
 }
@@ -85,7 +99,7 @@ VertexOutput LitPassVertex(VertexInput input)
 	for(int i=4;i<min(unity_LightIndicesOffsetAndCount.y,8);i++)
 	{
 		int lightIndex=unity_4LightIndices1[i-4];//限制8盏灯，需要unity_4LightIndices1
-		output.vertexLighting+=DiffuseLight(lightIndex,output.normal,output.worldPos);
+		output.vertexLighting+=DiffuseLight(lightIndex,output.normal,output.worldPos,1);
 	}
 	return output;
 }
@@ -103,7 +117,8 @@ float4 LitPassFragment(VertexOutput input):SV_TARGET
 	for(int i=0;i<min(unity_LightIndicesOffsetAndCount.y,4);i++)
 	{
 		int lightIndex=unity_4LightIndices0[i];//限制4盏灯，所以只需要unity_4LightIndices0即可
-		diffuseLight+=DiffuseLight(lightIndex,input.normal,input.worldPos);
+		float shadowAttenuation=ShadowAttenuation(input.worldPos);
+		diffuseLight+=DiffuseLight(lightIndex,input.normal,input.worldPos,shadowAttenuation);
 	}
 
 	float3 color=diffuseLight * albedo;
