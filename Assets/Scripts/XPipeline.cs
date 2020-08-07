@@ -28,6 +28,8 @@ public class XPipeline : RenderPipeline
     static int lightIndicesOffsetAndCountID = Shader.PropertyToID("unity_LightIndicesOffsetAndCount");
     static int shadowMapId = Shader.PropertyToID("_ShadowMap");
     static int worldToShadowMatrixId = Shader.PropertyToID("_WorldToShadowMatrix");
+    static int shadowBiasId = Shader.PropertyToID("_ShadowBias");
+    static int shadowStrengthId = Shader.PropertyToID("_ShadowStrength");
 
     Vector4[] visiableLightColors = new Vector4[maxVisiableLights];
     Vector4[] visiableLightDirectionsOrPositions = new Vector4[maxVisiableLights];
@@ -36,8 +38,8 @@ public class XPipeline : RenderPipeline
 
     //SpotLight Shadows
     RenderTexture shadowMap;
-
-    public  XPipeline(bool dynamicBatching,bool instancing)
+    int shadowMapSize;
+    public  XPipeline(bool dynamicBatching,bool instancing,int shadowMapSize)
     {
         GraphicsSettings.lightsUseLinearIntensity = true;
          
@@ -50,6 +52,7 @@ public class XPipeline : RenderPipeline
         {
             drawFlags |= DrawRendererFlags.EnableInstancing;
         }
+        this.shadowMapSize = shadowMapSize;
     }
     public override void Render(ScriptableRenderContext renderContext, Camera[] cameras)
     {
@@ -74,7 +77,8 @@ public class XPipeline : RenderPipeline
 #endif
         CullResults.Cull(ref cullingParameters, context,ref cull);
 
-        if (camera.cameraType == CameraType.Game)   //SceneView 光源个数有点问题
+        //注意Scene窗口如果没有启用光源需要注意
+      //  if (camera.cameraType == CameraType.Game)   //SceneView 光源个数有点问题
         {
             //阴影贴图是在常规场景之前渲染的，所以在渲染之前调用渲染阴影，但是在剔除之后
             if (cull.visibleLights.Count > 0)
@@ -228,7 +232,7 @@ public class XPipeline : RenderPipeline
     }
     void RenderShadows(ScriptableRenderContext context)
     {
-        shadowMap = RenderTexture.GetTemporary(512, 512, 16, RenderTextureFormat.Shadowmap);
+        shadowMap = RenderTexture.GetTemporary(shadowMapSize, shadowMapSize, 16, RenderTextureFormat.Shadowmap);
         shadowMap.filterMode = FilterMode.Bilinear;
         shadowMap.wrapMode = TextureWrapMode.Clamp;
 
@@ -246,6 +250,7 @@ public class XPipeline : RenderPipeline
            0, out viewMatrix, out projectionMatrix, out splitData
             );
         shadowBuffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
+        shadowBuffer.SetGlobalFloat(shadowBiasId, cull.visibleLights[0].light.shadowBias);
         context.ExecuteCommandBuffer(shadowBuffer);
         shadowBuffer.Clear();
 
@@ -266,6 +271,7 @@ public class XPipeline : RenderPipeline
         Matrix4x4 worldToShadowMatrix =scaleOffset*(projectionMatrix * viewMatrix);
         shadowBuffer.SetGlobalMatrix(worldToShadowMatrixId, worldToShadowMatrix);
         shadowBuffer.SetGlobalTexture(shadowMapId, shadowMap);
+        shadowBuffer.SetGlobalFloat(shadowStrengthId, cull.visibleLights[0].light.shadowStrength);
 
         shadowBuffer.EndSample("Render Shadows");
         context.ExecuteCommandBuffer(shadowBuffer);
