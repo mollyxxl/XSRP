@@ -30,6 +30,9 @@ public class XPipeline : RenderPipeline
     static int worldToShadowMatrixId = Shader.PropertyToID("_WorldToShadowMatrix");
     static int shadowBiasId = Shader.PropertyToID("_ShadowBias");
     static int shadowStrengthId = Shader.PropertyToID("_ShadowStrength");
+    static int shadowMapSizeId = Shader.PropertyToID("_ShadowMapSize");
+    
+    const string shadowsSoftKeyWord = "_SHADOWS_SOFT";
 
     Vector4[] visiableLightColors = new Vector4[maxVisiableLights];
     Vector4[] visiableLightDirectionsOrPositions = new Vector4[maxVisiableLights];
@@ -272,6 +275,14 @@ public class XPipeline : RenderPipeline
         shadowBuffer.SetGlobalMatrix(worldToShadowMatrixId, worldToShadowMatrix);
         shadowBuffer.SetGlobalTexture(shadowMapId, shadowMap);
         shadowBuffer.SetGlobalFloat(shadowStrengthId, cull.visibleLights[0].light.shadowStrength);
+       
+        float invShadowMapSize = 1f / shadowMapSize;
+        shadowBuffer.SetGlobalVector(shadowMapSizeId, 
+            new Vector4(invShadowMapSize, invShadowMapSize, shadowMapSize, shadowMapSize)
+            );
+
+        CoreUtils.SetKeyword(shadowBuffer, shadowsSoftKeyWord,
+            cull.visibleLights[0].light.shadows == LightShadows.Soft);
 
         shadowBuffer.EndSample("Render Shadows");
         context.ExecuteCommandBuffer(shadowBuffer);
