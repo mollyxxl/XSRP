@@ -32,35 +32,66 @@ CBUFFER_START(_LightBuffer)
 CBUFFER_END
 
 CBUFFER_START(_ShadowBuffer)
-	float4x4 _WorldToShadowMatrix;
-	float _ShadowStrength;
+	//float4x4 _WorldToShadowMatrix;
+	//float _ShadowStrength;
+	float4x4 _WorldToShadowMatrices[MAX_VISIABLE_LIGHTS];
+	float4 _ShadowData[MAX_VISIABLE_LIGHTS];
 	float4 _ShadowMapSize;
 CBUFFER_END
 
 TEXTURE2D_SHADOW(_ShadowMap);
 SAMPLER_CMP(sampler_ShadowMap);
 
-float ShadowAttenuation(float3 worldPos)
+float HardShadowAttenuation(float4 shadowPos)
 {
-	float4 shadowPos=mul(_WorldToShadowMatrix,float4(worldPos,1.0));
+	return SAMPLE_TEXTURE2D_SHADOW(_ShadowMap,sampler_ShadowMap,shadowPos.xyz);
+}
+float SoftShadowAttenuation(float4 shadowPos)
+{
+	real tentWeights[9];
+	real2 tentUVs[9];
+	SampleShadow_ComputeSamples_Tent_5x5(
+		_ShadowMapSize,shadowPos.xy,tentWeights,tentUVs
+	);
+	float attenuaation=0;
+	for(int i=0;i<9;i++){
+		attenuaation+=tentWeights[i]*SAMPLE_TEXTURE2D_SHADOW(
+			_ShadowMap,sampler_ShadowMap,float3(tentUVs[i].xy,shadowPos.z)
+		);
+	}
+	return attenuaation;
+}
+float ShadowAttenuation(int index,float3 worldPos)
+{
+	#if !defined(_SHADOWS_HARD) && !defined(_SHADOWS_SOFT)
+		return 1.0;
+	#endif
+	if(_ShadowData[index].x<=0)
+	{
+		return 1.0;
+	}
+	float4 shadowPos=mul(_WorldToShadowMatrices[index],float4(worldPos,1.0));
 	shadowPos.xyz/=shadowPos.w;
 	float attenuaation=SAMPLE_TEXTURE2D_SHADOW(_ShadowMap,sampler_ShadowMap,shadowPos.xyz);
 	
-	#if defined(_SHADOWS_SOFT)
-		real tentWeights[9];
-		real2 tentUVs[9];
-		SampleShadow_ComputeSamples_Tent_5x5(
-			_ShadowMapSize,shadowPos.xy,tentWeights,tentUVs
-		);
-		attenuaation=0;
-		for(int i=0;i<9;i++){
-			attenuaation+=tentWeights[i]*SAMPLE_TEXTURE2D_SHADOW(
-				_ShadowMap,sampler_ShadowMap,float3(tentUVs[i].xy,shadowPos.z)
-			);
-		}
+	#if defined(_SHADOWS_HARD)
+		#if defined(_SHADOWS_SOFT)
+			if(_ShadowData[index].y==0)
+			{
+				attenuaation=HardShadowAttenuation(shadowPos);
+			}
+			else{   //Soft Shadow
+				attenuaation=SoftShadowAttenuation(shadowPos);
+			}
+		#else
+			attenuaation=HardShadowAttenuation(shadowPos);
+		#endif
+	#else
+		attenuaation=SoftShadowAttenuation(shadowPos);
 	#endif
 	
-	return lerp(1,attenuaation,_ShadowStrength);
+	
+	return lerp(1,attenuaation,_ShadowData[index].x);
 }
 
 float3 DiffuseLight(int index,float3 normal,float3 worldPos,float shadowAttenuation)
@@ -136,7 +167,7 @@ float4 LitPassFragment(VertexOutput input):SV_TARGET
 	for(int i=0;i<min(unity_LightIndicesOffsetAndCount.y,4);i++)
 	{
 		int lightIndex=unity_4LightIndices0[i];//限制4盏灯，所以只需要unity_4LightIndices0即可
-		float shadowAttenuation=ShadowAttenuation(input.worldPos);
+		float shadowAttenuation=ShadowAttenuation(lightIndex,input.worldPos);
 		diffuseLight+=DiffuseLight(lightIndex,input.normal,input.worldPos,shadowAttenuation);
 	}
 
