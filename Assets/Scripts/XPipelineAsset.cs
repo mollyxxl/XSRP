@@ -18,8 +18,10 @@ public class XPipelineAsset : RenderPipelineAsset
     }
     [SerializeField]
     ShadowMapSize shadowMapSize= ShadowMapSize._1024;
+    [SerializeField]
+    float shadowDistance = 100f;
     protected override IRenderPipeline InternalCreatePipeline()
     {
-        return new XPipeline(dynamicBatching,instancing, (int)shadowMapSize);
+        return new XPipeline(dynamicBatching,instancing, (int)shadowMapSize,shadowDistance);
     }
 }

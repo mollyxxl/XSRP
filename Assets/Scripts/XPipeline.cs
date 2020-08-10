@@ -33,7 +33,8 @@ public class XPipeline : RenderPipeline
     //static int shadowStrengthId = Shader.PropertyToID("_ShadowStrength");
     static int shadowDataId = Shader.PropertyToID("_ShadowData");
     static int shadowMapSizeId = Shader.PropertyToID("_ShadowMapSize");
-    
+    static int globalShadowDataId = Shader.PropertyToID("_GlobalShadowData");
+
     const string shadowsSoftKeyWord = "_SHADOWS_SOFT";
     const string shadowsHardKeyWord = "_SHADOWS_HARD";
 
@@ -48,7 +49,12 @@ public class XPipeline : RenderPipeline
     RenderTexture shadowMap;
     int shadowMapSize;
     int shadowTileCount;
-    public  XPipeline(bool dynamicBatching,bool instancing,int shadowMapSize)
+
+    //Direction Shadows
+    float shadowDistance;
+
+    public  XPipeline(bool dynamicBatching,bool instancing,
+        int shadowMapSize,float shadowDistance)
     {
         GraphicsSettings.lightsUseLinearIntensity = true;
          
@@ -62,6 +68,7 @@ public class XPipeline : RenderPipeline
             drawFlags |= DrawRendererFlags.EnableInstancing;
         }
         this.shadowMapSize = shadowMapSize;
+        this.shadowDistance = shadowDistance;
     }
     public override void Render(ScriptableRenderContext renderContext, Camera[] cameras)
     {
@@ -79,6 +86,8 @@ public class XPipeline : RenderPipeline
         {
             return;
         }
+        cullingParameters.shadowDistance = Mathf.Min(shadowDistance, camera.farClipPlane);
+
 #if UNITY_EDITOR
         //SceneView 处理UI
         if(camera.cameraType== CameraType.SceneView)
@@ -217,6 +226,8 @@ public class XPipeline : RenderPipeline
                 v.y = -v.y;
                 v.z = -v.z;
                 visiableLightDirectionsOrPositions[i] = v;
+                shadow = ConfigureShadows(i, light.light);
+                shadow.z = 1f;
             }
             else
             {
@@ -240,15 +251,7 @@ public class XPipeline : RenderPipeline
                     attenuation.z = 1f / angleRange;
                     attenuation.w = -outerCos * attenuation.z;
 
-                    Light shadowLight = light.light;
-                    Bounds shadowBounds;
-                    if (shadowLight.shadows != LightShadows.None && 
-                        cull.GetShadowCasterBounds(i, out shadowBounds))
-                    {
-                        shadowTileCount += 1;
-                        shadow.x = shadowLight.shadowStrength;
-                        shadow.y = shadowLight.shadows == LightShadows.Soft ? 1.0f : 0f;
-                    }
+                    shadow = ConfigureShadows(i, light.light);
                 }
             }
             visiableLightAttenuations[i] = attenuation;
@@ -266,6 +269,22 @@ public class XPipeline : RenderPipeline
             cull.SetLightIndexMap(lightIndices);
         }
     }
+
+    private Vector4 ConfigureShadows(int lightIndex, Light shadowLight)
+    {
+        Vector4 shadow = Vector4.zero;
+        Bounds shadowBounds;
+        if (shadowLight.shadows != LightShadows.None &&
+            cull.GetShadowCasterBounds(lightIndex, out shadowBounds))
+        {
+            shadowTileCount += 1;
+            shadow.x = shadowLight.shadowStrength;
+            shadow.y = shadowLight.shadows == LightShadows.Soft ? 1.0f : 0f;
+        }
+
+        return shadow;
+    }
+
     void RenderShadows(ScriptableRenderContext context)
     {
         int spilt;
@@ -299,6 +318,7 @@ public class XPipeline : RenderPipeline
             ClearFlag.Depth);
 
         shadowBuffer.BeginSample("Render Shadows");
+        shadowBuffer.SetGlobalVector(globalShadowDataId, new Vector4(tileScale, shadowDistance*shadowDistance));
         context.ExecuteCommandBuffer(shadowBuffer);
         shadowBuffer.Clear();
 
@@ -318,9 +338,22 @@ public class XPipeline : RenderPipeline
 
             Matrix4x4 viewMatrix, projectionMatrix;
             ShadowSplitData splitData;
-            if (!cull.ComputeSpotShadowMatricesAndCullingPrimitives(
-               i, out viewMatrix, out projectionMatrix, out splitData
-                )){
+            bool validShadows;
+            if (shadowData[i].z > 0f)
+            {
+                validShadows = cull.ComputeDirectionalShadowMatricesAndCullingPrimitives(
+                    i, 0, 1, Vector3.right, (int)tileSize, cull.visibleLights[i].light.shadowNearPlane,
+                    out viewMatrix, out projectionMatrix, out splitData);
+            }
+            else
+            {
+                validShadows = cull.ComputeSpotShadowMatricesAndCullingPrimitives(
+                                i, out viewMatrix, out projectionMatrix, out splitData
+                             );
+            }
+          
+            if (!validShadows)
+            {
                 shadowData[i].x = 0f;
                 continue;
             }
@@ -328,8 +361,10 @@ public class XPipeline : RenderPipeline
             float tileOffsetY = tileIndex / spilt;
             tileViewport.x = tileOffsetX * tileSize;
             tileViewport.y = tileOffsetY * tileSize;
+            shadowData[i].z = tileOffsetX * tileScale;
+            shadowData[i].w = tileOffsetY * tileScale;
 
-            if (spilt > 1)
+           // if (spilt > 1)
             {
                 shadowBuffer.SetViewport(tileViewport);
                 shadowBuffer.EnableScissorRect(
@@ -344,6 +379,7 @@ public class XPipeline : RenderPipeline
             shadowBuffer.Clear();
 
             var shadowSetting = new DrawShadowsSettings(cull, i);
+            shadowSetting.splitData.cullingSphere = splitData.cullingSphere;
             context.DrawShadows(ref shadowSetting);
 
             if (SystemInfo.usesReversedZBuffer)
@@ -363,14 +399,14 @@ public class XPipeline : RenderPipeline
             worldToShadowMatrices[i]= scaleOffset * (projectionMatrix * viewMatrix);
 
 
-            if (spilt > 1)
-            {
-                var tileMatrix = Matrix4x4.identity;
-                tileMatrix.m00 = tileMatrix.m11 = tileScale;
-                tileMatrix.m03 = tileOffsetX * tileScale;
-                tileMatrix.m13 = tileOffsetY * tileScale;
-                worldToShadowMatrices[i] = tileMatrix * worldToShadowMatrices[i];
-            }
+            //if (spilt > 1)
+            //{
+            //    var tileMatrix = Matrix4x4.identity;
+            //    tileMatrix.m00 = tileMatrix.m11 = tileScale;
+            //    tileMatrix.m03 = tileOffsetX * tileScale;
+            //    tileMatrix.m13 = tileOffsetY * tileScale;
+            //    worldToShadowMatrices[i] = tileMatrix * worldToShadowMatrices[i];
+            //}
 
             tileIndex += 1;
 
@@ -384,8 +420,8 @@ public class XPipeline : RenderPipeline
             }
         }
 
-        if(spilt>1)
-            shadowBuffer.DisableScissorRect();   //恢复正常渲染区域，防止正常渲染收到影响
+         //if(spilt>1)
+         shadowBuffer.DisableScissorRect();   //恢复正常渲染区域，防止正常渲染收到影响
 
         shadowBuffer.SetGlobalTexture(shadowMapId, shadowMap);
         //shadowBuffer.SetGlobalFloat(shadowStrengthId, cull.visibleLights[0].light.shadowStrength);
