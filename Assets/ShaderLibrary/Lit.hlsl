@@ -18,6 +18,11 @@ CBUFFER_START(UnityPerDraw)
 	float4 unity_4LightIndices0,unity_4LightIndices1;
 CBUFFER_END
 
+CBUFFER_START(UnityPerMaterial)
+	float4 _MainTex_ST;
+	float _Cutoff;
+CBUFFER_END
+
 //先定义UNITY_MATRIX_M 再引用
 #define UNITY_MATRIX_M  unity_ObjectToWorld
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/UnityInstancing.hlsl"
@@ -51,6 +56,10 @@ SAMPLER_CMP(sampler_ShadowMap);
 
 TEXTURE2D_SHADOW(_CascadedShadowMap);
 SAMPLER_CMP(sampler_CascadedShadowMap);
+
+TEXTURE2D(_MainTex);
+SAMPLER(sampler_MainTex);
+
 
 float DistanceToCameraSqr (float3 worldPos) {
 	float3 cameraToFragment = worldPos - _WorldSpaceCameraPos;
@@ -188,6 +197,7 @@ float3 DiffuseLight(int index,float3 normal,float3 worldPos,float shadowAttenuat
 struct VertexInput{
 	float4 pos:POSITION;
 	float3 normal:NORMAL;
+	float2 uv:TEXCOORD0;
 	UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 
@@ -196,6 +206,7 @@ struct VertexOutput{
 	float3 normal:TEXCOORD0;
 	float3 worldPos:TEXCOORD1;
 	float3 vertexLighting:TEXCOORD2;
+	float2 uv:TEXCOORD3;
 	UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 
@@ -216,14 +227,21 @@ VertexOutput LitPassVertex(VertexInput input)
 		int lightIndex=unity_4LightIndices1[i-4];//限制8盏灯，需要unity_4LightIndices1
 		output.vertexLighting+=DiffuseLight(lightIndex,output.normal,output.worldPos,1);
 	}
+	output.uv=TRANSFORM_TEX(input.uv,_MainTex);
 	return output;
 }
-float4 LitPassFragment(VertexOutput input):SV_TARGET
+float4 LitPassFragment(VertexOutput input,FRONT_FACE_TYPE isFrontFace:FRONT_FACE_SEMANTIC):SV_TARGET
 {
 	UNITY_SETUP_INSTANCE_ID(input);
 	input.normal=normalize(input.normal);
+	input.normal = IS_FRONT_VFACE(isFrontFace, input.normal, -input.normal);
 	
-	float3 albedo=UNITY_ACCESS_INSTANCED_PROP(PerInstance,_Color).rgb;
+	float4 albedoAlpha=SAMPLE_TEXTURE2D(_MainTex,sampler_MainTex,input.uv);
+	albedoAlpha *= UNITY_ACCESS_INSTANCED_PROP(PerInstance,_Color);
+
+	#if defined(_CLIPPING)
+	clip(albedoAlpha.a - _Cutoff);
+	#endif
 
 	float3 diffuseLight=input.vertexLighting;   //顶点光照
 
@@ -240,7 +258,7 @@ float4 LitPassFragment(VertexOutput input):SV_TARGET
 		diffuseLight+=DiffuseLight(lightIndex,input.normal,input.worldPos,shadowAttenuation);
 	}
 
-	float3 color=diffuseLight * albedo;
-	return float4(color,1);
+	float3 color=diffuseLight * albedoAlpha.rgb;
+	return float4(color,albedoAlpha.a);
 }
 #endif   //XRP_LIT_INCLUDED
