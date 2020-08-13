@@ -1,10 +1,12 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
+﻿
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using UnityEngine.Experimental.GlobalIllumination;
+using LightType = UnityEngine.LightType;
 using UnityEngine.Rendering;
 using Conditional = System.Diagnostics.ConditionalAttribute;
+using Unity.Collections;
+
 public class XPipeline : RenderPipeline
 {
     CullResults cull;
@@ -66,6 +68,45 @@ public class XPipeline : RenderPipeline
     Vector3 shadowCascadeSplit;
 
     bool mainLightExists;
+
+#if UNITY_EDITOR
+    static Lightmapping.RequestLightsDelegate lightmappingLightsDelegate =
+        (Light[] inputLights, NativeArray<LightDataGI> outputLights) => {
+            LightDataGI lightData = new LightDataGI();
+            for (int i = 0; i < inputLights.Length; i++)
+            {
+                Light light = inputLights[i];
+                switch (light.type)
+                {
+                    case LightType.Directional:
+                        var directionalLight = new DirectionalLight();
+                        LightmapperUtils.Extract(light, ref directionalLight);
+                        lightData.Init(ref directionalLight);
+                        break;
+                    case LightType.Point:
+                        var pointLight = new PointLight();
+                        LightmapperUtils.Extract(light, ref pointLight);
+                        lightData.Init(ref pointLight);
+                        break;
+                    case LightType.Spot:
+                        var spotLight = new SpotLight();
+                        LightmapperUtils.Extract(light, ref spotLight);
+                        lightData.Init(ref spotLight);
+                        break;
+                    case LightType.Area:
+                        var rectangleLight = new RectangleLight();
+                        LightmapperUtils.Extract(light, ref rectangleLight);
+                        lightData.Init(ref rectangleLight);
+                        break;
+                    default:
+                        lightData.InitNoBake(light.GetInstanceID());
+                        break;
+                }
+                lightData.falloff = FalloffType.InverseSquared;
+                outputLights[i] = lightData;
+            }
+        };
+#endif
     public  XPipeline(bool dynamicBatching,bool instancing,
         int shadowMapSize,float shadowDistance,
         int shadowCascades,Vector3 shadowCascadeSplit)
@@ -88,7 +129,19 @@ public class XPipeline : RenderPipeline
         this.shadowDistance = shadowDistance;
         this.shadowCascades = shadowCascades;
         this.shadowCascadeSplit = shadowCascadeSplit;
+
+#if UNITY_EDITOR
+        Lightmapping.SetDelegate(lightmappingLightsDelegate);
+#endif
     }
+
+#if UNITY_EDITOR
+    public override void Dispose()
+    {
+        base.Dispose();
+        Lightmapping.ResetDelegate();
+    }
+#endif
     public override void Render(ScriptableRenderContext renderContext, Camera[] cameras)
     {
         base.Render(renderContext, cameras);
