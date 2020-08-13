@@ -18,6 +18,8 @@ CBUFFER_START(UnityPerDraw)
 	float4x4 unity_ObjectToWorld,unity_WorldToObject;
 	float4 unity_LightIndicesOffsetAndCount;   //x：偏移量  y：影响对象的光源数量
 	float4 unity_4LightIndices0,unity_4LightIndices1;
+	float4 unity_SpecCube0_BoxMin,unity_SpecCube0_BoxMax;
+	float4 unity_SpecCube0_ProbePosition;
 CBUFFER_END
 
 CBUFFER_START(UnityPerMaterial)
@@ -66,11 +68,26 @@ SAMPLER_CMP(sampler_CascadedShadowMap);
 TEXTURE2D(_MainTex);
 SAMPLER(sampler_MainTex);
 
+float3 BoxProjection (
+	float3 direction, float3 position,
+	float4 cubemapPosition, float4 boxMin, float4 boxMax
+) {
+	UNITY_BRANCH
+	if (cubemapPosition.w > 0) {
+		float3 factors =
+			((direction > 0 ? boxMax.xyz : boxMin.xyz) - position) / direction;
+		float scalar = min(min(factors.x, factors.y), factors.z);
+		direction = direction * scalar + (position - cubemapPosition.xyz);
+	}
+	return direction;
+}
 float3 SampleEnvironment(LitSurface s){
 	float3 reflectVector=reflect(-s.viewDir,s.normal);
 	float mip=PerceptualRoughnessToMipmapLevel(s.perceptualRoughness);
 	
-	float3 uvw=reflectVector;
+	float3 uvw=BoxProjection(reflectVector,s.position,
+				unity_SpecCube0_ProbePosition,unity_SpecCube0_BoxMin,unity_SpecCube0_BoxMax
+			);
 	float4 sample=SAMPLE_TEXTURECUBE_LOD(unity_SpecCube0,samplerunity_SpecCube0,uvw,mip);
 	float3 color=sample.rgb;
 	return color;
