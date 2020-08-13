@@ -67,6 +67,16 @@ CBUFFER_START(_ShadowBuffer)
 	float _CascadedShadowStrength;
 CBUFFER_END
 
+CBUFFER_START(UnityProbeVolume)
+	float4 unity_ProbeVolumeParams;
+	float4x4 unity_ProbeVolumeWorldToObject;
+	float3 unity_ProbeVolumeSizeInv;
+	float3 unity_ProbeVolumeMin;
+CBUFFER_END
+
+TEXTURE3D_FLOAT(unity_ProbeVolumeSH);
+SAMPLER(samplerunity_ProbeVolumeSH);
+
 TEXTURE2D_SHADOW(_ShadowMap);
 SAMPLER_CMP(sampler_ShadowMap);
 
@@ -149,15 +159,25 @@ float3 LightSurface(LitSurface s,float3 lightDir)
 
 float3 SampleLightProbes (LitSurface s) {
 	
-	float4 coefficients[7];
-	coefficients[0] = unity_SHAr;
-	coefficients[1] = unity_SHAg;
-	coefficients[2] = unity_SHAb;
-	coefficients[3] = unity_SHBr;
-	coefficients[4] = unity_SHBg;
-	coefficients[5] = unity_SHBb;
-	coefficients[6] = unity_SHC;
-	return max(0.0, SampleSH9(coefficients, s.normal));
+	if (unity_ProbeVolumeParams.x) {
+		return SampleProbeVolumeSH4(
+			TEXTURE3D_PARAM(unity_ProbeVolumeSH, samplerunity_ProbeVolumeSH),
+			s.position, s.normal, unity_ProbeVolumeWorldToObject,
+			unity_ProbeVolumeParams.y, unity_ProbeVolumeParams.z,
+			unity_ProbeVolumeMin, unity_ProbeVolumeSizeInv
+		);
+	}
+	else {
+		float4 coefficients[7];
+		coefficients[0] = unity_SHAr;
+		coefficients[1] = unity_SHAg;
+		coefficients[2] = unity_SHAb;
+		coefficients[3] = unity_SHBr;
+		coefficients[4] = unity_SHBg;
+		coefficients[5] = unity_SHBb;
+		coefficients[6] = unity_SHC;
+		return max(0.0, SampleSH9(coefficients, s.normal));
+	}
 	
 }
 

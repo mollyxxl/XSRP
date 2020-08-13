@@ -183,7 +183,8 @@ public class XPipeline : RenderPipeline
         drawSetting.rendererConfiguration |= 
                 RendererConfiguration.PerObjectReflectionProbes|
                 RendererConfiguration.PerObjectLightmaps|
-                RendererConfiguration.PerObjectLightProbe;
+                RendererConfiguration.PerObjectLightProbe|
+                RendererConfiguration.PerObjectLightProbeProxyVolume;
 
         //drawSetting.flags = drawFlags;   //DrawRendererFlags.EnableDynamicBatching;  //动态合批
         drawSetting.sorting.flags = SortFlags.CommonOpaque;
