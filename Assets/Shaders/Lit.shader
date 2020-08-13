@@ -34,7 +34,8 @@
            #pragma multi_compile _ _CASCADED_SHADOWS_HARD _CASCADED_SHADOWS_SOFT
            #pragma multi_compile _ _SHADOWS_HARD
            #pragma multi_compile _ _SHADOWS_SOFT
-           #pragma multi_compile _ _LIGHTMAP_ON
+           #pragma multi_compile _ LIGHTMAP_ON
+           #pragma multi_compile _ DYNAMICLIGHTMAP_ON
 
            #pragma shader_feature _CLIPPING_ON
            #pragma shader_feature _RECEIVE_SHADOWS

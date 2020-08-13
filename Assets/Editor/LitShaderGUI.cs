@@ -38,7 +38,7 @@ public class LitShaderGUI : ShaderGUI
     }
     bool PremultiplyAlpha {
         set {
-            FindProperty("", properties).floatValue = value ? 1 : 0;
+            FindProperty("_PremulAlpha", properties).floatValue = value ? 1 : 0;
             SetKeywordEnabled("_PREMULTIPLY_ALPHA", value);
         }
     }
