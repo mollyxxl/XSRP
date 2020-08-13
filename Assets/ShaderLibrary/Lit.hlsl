@@ -4,6 +4,7 @@
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/common.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Shadow/ShadowSamplingTent.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/ImageBasedLighting.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
 #include "Lighting.hlsl"
 
 CBUFFER_START(UnityPerFrame)
@@ -19,9 +20,9 @@ CBUFFER_START(UnityPerDraw)
 	float4 unity_LightIndicesOffsetAndCount;   //x：偏移量  y：影响对象的光源数量
 	float4 unity_4LightIndices0,unity_4LightIndices1;
 	float4 unity_SpecCube0_BoxMin,unity_SpecCube0_BoxMax;
-	float4 unity_SpecCube0_ProbePosition;
+	float4 unity_SpecCube0_ProbePosition,unity_SpecCube0_HDR;
 	float4 unity_SpecCube1_BoxMin,unity_SpecCube1_BoxMax;
-	float4 unity_SpecCube1_ProbePosition;
+	float4 unity_SpecCube1_ProbePosition,unity_SpecCube1_HDR;
 CBUFFER_END
 
 CBUFFER_START(UnityPerMaterial)
@@ -91,7 +92,7 @@ float3 SampleEnvironment(LitSurface s){
 				unity_SpecCube0_ProbePosition,unity_SpecCube0_BoxMin,unity_SpecCube0_BoxMax
 			);
 	float4 sample=SAMPLE_TEXTURECUBE_LOD(unity_SpecCube0,samplerunity_SpecCube0,uvw,mip);
-	float3 color=sample.rgb;
+	float3 color=  DecodeHDREnvironment(sample,unity_SpecCube0_HDR);  //sample.rgb;
 
 	float blend = unity_SpecCube0_BoxMin.w;
 	if (blend < 0.99999) {
@@ -103,7 +104,7 @@ float3 SampleEnvironment(LitSurface s){
 		sample = SAMPLE_TEXTURECUBE_LOD(
 			unity_SpecCube1, samplerunity_SpecCube0, uvw, mip
 		);
-		color = lerp(sample.rgb, color, blend);
+		color = lerp(DecodeHDREnvironment(sample,unity_SpecCube1_HDR), color, blend);
 	}
 	return color;
 }
