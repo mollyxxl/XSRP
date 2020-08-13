@@ -57,5 +57,10 @@ float3 ReflectEnvironment(LitSurface s,float3 environment)
 	environment*=lerp(s.specular,s.fresnelStrength,fresnel);
 	return environment;
 }
+void PremultiplyAlpha(inout LitSurface s,inout float alpha)
+{
+	s.diffuse *=alpha;
+	alpha=lerp(alpha,1,s.reflectivity);
+}
 
 #endif   //XRP_LIGHTING_INCLUDED

@@ -327,6 +327,9 @@ float4 LitPassFragment(VertexOutput input,FRONT_FACE_TYPE isFrontFace:FRONT_FACE
 		UNITY_ACCESS_INSTANCED_PROP(PerInstance,_Smoothness)
 	);
 
+	#if defined(_PREMULTIPLY_ALPHA)
+		PremultiplyAlpha(surface,albedoAlpha.a);
+	#endif
 	//float3 diffuseLight=input.vertexLighting;   //∂•µ„π‚’’
 	float3 color=input.vertexLighting * surface.diffuse;
 
