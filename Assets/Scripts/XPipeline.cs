@@ -180,7 +180,11 @@ public class XPipeline : RenderPipeline
             drawSetting.rendererConfiguration = RendererConfiguration.PerObjectLightIndices8;
         }
 
-        drawSetting.rendererConfiguration |= RendererConfiguration.PerObjectReflectionProbes;
+        drawSetting.rendererConfiguration |= 
+                RendererConfiguration.PerObjectReflectionProbes|
+                RendererConfiguration.PerObjectLightmaps|
+                RendererConfiguration.PerObjectLightProbe;
+
         //drawSetting.flags = drawFlags;   //DrawRendererFlags.EnableDynamicBatching;  //动态合批
         drawSetting.sorting.flags = SortFlags.CommonOpaque;
         var filterSettings = new FilterRenderersSettings(true)

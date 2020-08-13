@@ -8,6 +8,7 @@
        _Cutoff("Alpha Cutoff",Range(0,1))=0.5
        _Metallic("Metallic",Range(0,1))=0.5
        _Smoothness("Smoothness",Range(0,1))=0.5
+       [HDR] _EmissionColor ("Emission Color", Color) = (0, 0, 0, 0)
        [Enum(UnityEngine.Rendering.CullMode)]_Cull("Cull",Float)=2
        [Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend("Src Blend",Float)=1
        [Enum(UnityEngine.Rendering.BlendMode)] _DstBlend("Dst Blend",Float)=0
@@ -33,6 +34,7 @@
            #pragma multi_compile _ _CASCADED_SHADOWS_HARD _CASCADED_SHADOWS_SOFT
            #pragma multi_compile _ _SHADOWS_HARD
            #pragma multi_compile _ _SHADOWS_SOFT
+           #pragma multi_compile _ _LIGHTMAP_ON
 
            #pragma shader_feature _CLIPPING_ON
            #pragma shader_feature _RECEIVE_SHADOWS
@@ -68,6 +70,23 @@
 
            ENDHLSL
         }
+
+        Pass {
+			Tags {
+				"LightMode" = "Meta"
+			}
+			
+			Cull Off
+			
+			HLSLPROGRAM
+			
+			#pragma vertex MetaPassVertex
+			#pragma fragment MetaPassFragment
+			
+			#include "../ShaderLibrary/Meta.hlsl"
+			
+			ENDHLSL
+		}
     }
     CustomEditor "LitShaderGUI"
 }
