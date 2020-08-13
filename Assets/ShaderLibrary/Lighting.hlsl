@@ -3,6 +3,7 @@
 
 //IBLœ‡πÿ
 TEXTURECUBE(unity_SpecCube0);
+TEXTURECUBE(unity_SpecCube1);
 SAMPLER(samplerunity_SpecCube0);
 
 struct LitSurface{

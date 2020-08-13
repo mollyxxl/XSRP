@@ -20,6 +20,8 @@ CBUFFER_START(UnityPerDraw)
 	float4 unity_4LightIndices0,unity_4LightIndices1;
 	float4 unity_SpecCube0_BoxMin,unity_SpecCube0_BoxMax;
 	float4 unity_SpecCube0_ProbePosition;
+	float4 unity_SpecCube1_BoxMin,unity_SpecCube1_BoxMax;
+	float4 unity_SpecCube1_ProbePosition;
 CBUFFER_END
 
 CBUFFER_START(UnityPerMaterial)
@@ -90,6 +92,19 @@ float3 SampleEnvironment(LitSurface s){
 			);
 	float4 sample=SAMPLE_TEXTURECUBE_LOD(unity_SpecCube0,samplerunity_SpecCube0,uvw,mip);
 	float3 color=sample.rgb;
+
+	float blend = unity_SpecCube0_BoxMin.w;
+	if (blend < 0.99999) {
+		uvw = BoxProjection(
+			reflectVector, s.position,
+			unity_SpecCube1_ProbePosition,
+			unity_SpecCube1_BoxMin, unity_SpecCube1_BoxMax
+		);
+		sample = SAMPLE_TEXTURECUBE_LOD(
+			unity_SpecCube1, samplerunity_SpecCube0, uvw, mip
+		);
+		color = lerp(sample.rgb, color, blend);
+	}
 	return color;
 }
 
