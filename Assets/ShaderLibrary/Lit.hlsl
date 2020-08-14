@@ -41,7 +41,7 @@ CBUFFER_END
 #define UNITY_MATRIX_I_M unity_WorldToObject
 
 #if !defined(LIGHTMAP_ON)
-	#if defined(_SHADOWMASK) || defined(_DISTANCE_SHADOWMASK)
+	#if defined(_SHADOWMASK) || defined(_DISTANCE_SHADOWMASK)|| defined(_SUBTRACTIVE_LIGHTING)
 		#define SHADOWS_SHADOWMASK
 	#endif
 #endif
@@ -74,6 +74,7 @@ CBUFFER_START(_ShadowBuffer)
 	float4 _CascadedShadowMapSize;
 	float4 _GlobalShadowData;
 	float _CascadedShadowStrength;
+	float4	_SubtractiveShadowColor;
 CBUFFER_END
 
 CBUFFER_START(UnityProbeVolume)
@@ -229,6 +230,17 @@ float MixRealtimeAndBakedShadowAttenuation(float realtime,float4 bakedShadows,in
 			}
 			return lerp(realtime,baked,t);
 		}
+	elif defined(_SUBTRACTIVE_LIGHTING)
+		#if !defined(LIGHTMAP_ON)
+			if(isMainLight){
+				return min(fadedRealtime,bakedShadows.x);
+			}
+		#endif
+		#if !defined(_CASCADED_SHADOWS_HARD) && !defined(_CASCADED_SHADOWS_SOFT)
+			if (lightIndex == 0) {
+				return bakedShadows.x;
+			}
+		#endif
 	#endif
 	
 	return fadedRealtime;
@@ -304,7 +316,7 @@ float InsideCascadeCullingSphere (int index, float3 worldPos) {
 	float4 s = _CascadeCullingSpheres[index];
 	return dot(worldPos - s.xyz, worldPos - s.xyz) < s.w;
 }
-float CascadedShadowAttenuation(float3 worldPos)
+float CascadedShadowAttenuation(float3 worldPos,bool applyStrength=true)
 {	
 	#if !defined(_RECEIVE_SHADOWS)
 		return 1.0;
@@ -333,7 +345,12 @@ float CascadedShadowAttenuation(float3 worldPos)
 		attenuation = SoftShadowAttenuation(shadowPos,true);
 	#endif
 
-	return lerp(1,attenuation,_CascadedShadowStrength);
+	if(applyStrength){
+		return lerp(1,attenuation,_CascadedShadowStrength);
+	}
+	else{
+		return attenuation;
+	}
 }
 
 float3 MainLight(LitSurface s,float shadowAttenuation)
@@ -379,12 +396,14 @@ float3 SubtractiveLighting(LitSurface s,float3 bakedLighting)
 	float3 lightDirection=_VisibleLightDirectionsOrPositions[0].xyz;
 	float3 diffuse=lightColor*saturate(dot(lightDirection,s.normal));
 	float shadowAttenuation=saturate(
-		CascadedShadowAttenuation(s.position)+
+		CascadedShadowAttenuation(s.position,false)+
 		RealtimeToBakedShadowsInterpolator(s.position)
 		);
 	float3 shadowedLightingGuess = diffuse * (1.0 - shadowAttenuation);
 	float3 subtractedLighting = bakedLighting - shadowedLightingGuess;
-	return saturate(subtractedLighting);
+	subtractedLighting=max(subtractedLighting,_SubtractiveShadowColor);
+	subtractedLighting=lerp(bakedLighting,subtractedLighting,_CascadedShadowStrength);
+	return min(bakedLighting,subtractedLighting);
 }
 struct VertexInput{
 	float4 pos:POSITION;
@@ -431,10 +450,10 @@ float3 GlobalIllumination(VertexOutput input,LitSurface surface)
 float4 BakedShadows(VertexOutput input,LitSurface surface)
 {
 	#if defined(LIGHTMAP_ON)
-		#if defined(_SHADOWMASK) || defined(_DISTANCE_SHADOWMASK)
+		#if defined(_SHADOWMASK) || defined(_DISTANCE_SHADOWMASK) 
 			return SAMPLE_TEXTURE2D(unity_ShadowMask,samplerunity_ShadowMask,input.lightmapUV);
 		#endif
-	#elif defined(_SHADOWMASK) || defined(_DISTANCE_SHADOWMASK)
+	#elif defined(_SHADOWMASK) || defined(_DISTANCE_SHADOWMASK) || defined(_SUBTRACTIVE_LIGHTING)
 		if(unity_ProbeVolumeParams.x)  
 		{
 			//LPPV Shadows

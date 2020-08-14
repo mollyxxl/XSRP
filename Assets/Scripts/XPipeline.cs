@@ -42,6 +42,7 @@ public class XPipeline : RenderPipeline
     static int cascadedShadowStrengthId = Shader.PropertyToID("_CascadedShadowStrength");
     static int cascadedCullingSpheresId = Shader.PropertyToID("_CascadeCullingSpheres");
     static int visibleLightOcclusionMasksId = Shader.PropertyToID("_VisibleLightOcclusionMasks");
+    static int subtractiveShadowColorId = Shader.PropertyToID("_SubtractiveShadowColor");
 
     const string shadowsSoftKeyWord = "_SHADOWS_SOFT";
     const string shadowsHardKeyWord = "_SHADOWS_HARD";
@@ -343,7 +344,13 @@ public class XPipeline : RenderPipeline
             if (baking.lightmapBakeType == LightmapBakeType.Mixed)
             {
                 shadowmaskExists |= baking.mixedLightingMode == MixedLightingMode.Shadowmask;
-                subtractiveLighting |= baking.mixedLightingMode == MixedLightingMode.Subtractive;
+                //subtractiveLighting |= baking.mixedLightingMode == MixedLightingMode.Subtractive;
+                if (baking.mixedLightingMode == MixedLightingMode.Subtractive)
+                {
+                    subtractiveLighting = true;
+                    cameraBuffer.SetGlobalColor(subtractiveShadowColorId,
+                        RenderSettings.subtractiveShadowColor.linear);
+                }
             }
 
             if (light.lightType == LightType.Directional)
