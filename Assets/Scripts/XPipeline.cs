@@ -49,7 +49,7 @@ public class XPipeline : RenderPipeline
     const string cascadedShadowsSoftKeyword = "_CASCADED_SHADOWS_SOFT";
     const string shadowmaskKeyword = "_SHADOWMASK";
     const string distanceShadowMaskKeyword = "_DISTANCE_SHADOWMASK";
-
+    const string subtractiveLightingKeyword = "_SUBTRACTIVE_LIGHTING";
 
     Vector4[] visiableLightColors = new Vector4[maxVisiableLights];
     Vector4[] visiableLightDirectionsOrPositions = new Vector4[maxVisiableLights];
@@ -325,6 +325,7 @@ public class XPipeline : RenderPipeline
     {
         mainLightExists = false;
         bool shadowmaskExists = false;
+        bool subtractiveLighting = false;
         shadowTileCount = 0;
         for (int i = 0; i < cull.visibleLights.Count; i++)
         {
@@ -342,6 +343,7 @@ public class XPipeline : RenderPipeline
             if (baking.lightmapBakeType == LightmapBakeType.Mixed)
             {
                 shadowmaskExists |= baking.mixedLightingMode == MixedLightingMode.Shadowmask;
+                subtractiveLighting |= baking.mixedLightingMode == MixedLightingMode.Subtractive;
             }
 
             if (light.lightType == LightType.Directional)
@@ -395,6 +397,7 @@ public class XPipeline : RenderPipeline
         bool useDistanceShadowmaks = QualitySettings.shadowmaskMode == ShadowmaskMode.DistanceShadowmask;
         CoreUtils.SetKeyword(cameraBuffer, shadowmaskKeyword, shadowmaskExists && !useDistanceShadowmaks);
         CoreUtils.SetKeyword(cameraBuffer, distanceShadowMaskKeyword, shadowmaskExists && useDistanceShadowmaks);
+        CoreUtils.SetKeyword(cameraBuffer, subtractiveLightingKeyword, subtractiveLighting);
 
         //超过最大光源个数限制时，设置为-1的灯(不存在的灯)
         if ( mainLightExists || cull.visibleLights.Count > maxVisiableLights)
