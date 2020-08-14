@@ -208,7 +208,7 @@ float RealtimeToBakedShadowsInterpolator(float3 worldPos)
 	return saturate(d*_GlobalShadowData.y+_GlobalShadowData.z);
 }
 
-float MixRealtimeAndBakedShadowAttenuation(float realtime,float4 bakedShadows,int lightIndex,float3 worldPos)
+float MixRealtimeAndBakedShadowAttenuation(float realtime,float4 bakedShadows,int lightIndex,float3 worldPos,bool isMainLight = false)
 {
 	float t = RealtimeToBakedShadowsInterpolator(worldPos);
 	float fadedRealtime= saturate(realtime + t);  // lerp(realtime,1,t);
@@ -222,6 +222,11 @@ float MixRealtimeAndBakedShadowAttenuation(float realtime,float4 bakedShadows,in
 		}
 	#elif defined(_DISTANCE_SHADOWMASK)
 		if(hasBakedShadows){
+			//点光源直接返回烘焙结果
+			bool bakedOnly= _VisibleLightSpotDirections[lightIndex].w > 0.0;
+			if(!isMainLight&&bakedOnly){
+				return baked;
+			}
 			return lerp(realtime,baked,t);
 		}
 	#endif
@@ -495,7 +500,8 @@ float4 LitPassFragment(VertexOutput input,FRONT_FACE_TYPE isFrontFace:FRONT_FACE
 
 	#if defined(_CASCADED_SHADOWS_HARD) ||defined(_CASCADED_SHADOWS_SOFT)
 			float shadowAttenuation=MixRealtimeAndBakedShadowAttenuation(
-				CascadedShadowAttenuation(surface.position),bakedShadows,0,surface.position
+				CascadedShadowAttenuation(surface.position),bakedShadows,
+				0,surface.position,true
 			);
 			color+=MainLight(surface,shadowAttenuation);
 	#endif

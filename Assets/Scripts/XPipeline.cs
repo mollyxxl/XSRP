@@ -383,6 +383,10 @@ public class XPipeline : RenderPipeline
 
                     shadow = ConfigureShadows(i, light.light);
                 }
+                else {  
+                    //Point Light
+                    visiableLightSpotDirections[i] = Vector4.one;
+                }
             }
             visiableLightAttenuations[i] = attenuation;
             shadowData[i] = shadow;
