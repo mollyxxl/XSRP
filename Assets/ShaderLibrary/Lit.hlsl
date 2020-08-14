@@ -41,7 +41,7 @@ CBUFFER_END
 #define UNITY_MATRIX_I_M unity_WorldToObject
 
 #if !defined(LIGHTMAP_ON)
-	#if defined(_SHADOWMASK)
+	#if defined(_SHADOWMASK) || defined(_DISTANCE_SHADOWMASK)
 		#define SHADOWS_SHADOWMASK
 	#endif
 #endif
@@ -219,6 +219,10 @@ float MixRealtimeAndBakedShadowAttenuation(float realtime,float4 bakedShadows,in
 	#if defined(_SHADOWMASK)
 		if(hasBakedShadows){
 			return min(fadedRealtime,baked);
+		}
+	#elif defined(_DISTANCE_SHADOWMASK)
+		if(hasBakedShadows){
+			return lerp(realtime,baked,t);
 		}
 	#endif
 	
@@ -407,10 +411,10 @@ float3 GlobalIllumination(VertexOutput input,LitSurface surface)
 float4 BakedShadows(VertexOutput input,LitSurface surface)
 {
 	#if defined(LIGHTMAP_ON)
-		#if defined(_SHADOWMASK)
+		#if defined(_SHADOWMASK) || defined(_DISTANCE_SHADOWMASK)
 			return SAMPLE_TEXTURE2D(unity_ShadowMask,samplerunity_ShadowMask,input.lightmapUV);
 		#endif
-	#elif defined(_SHADOWMASK)
+	#elif defined(_SHADOWMASK) || defined(_DISTANCE_SHADOWMASK)
 		if(unity_ProbeVolumeParams.x)  
 		{
 			//LPPV Shadows

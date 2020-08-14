@@ -48,6 +48,7 @@ public class XPipeline : RenderPipeline
     const string cascadedShadowsHardKeyword = "_CASCADED_SHADOWS_HARD";
     const string cascadedShadowsSoftKeyword = "_CASCADED_SHADOWS_SOFT";
     const string shadowmaskKeyword = "_SHADOWMASK";
+    const string distanceShadowMaskKeyword = "_DISTANCE_SHADOWMASK";
 
 
     Vector4[] visiableLightColors = new Vector4[maxVisiableLights];
@@ -387,7 +388,9 @@ public class XPipeline : RenderPipeline
             shadowData[i] = shadow;
         }
 
-        CoreUtils.SetKeyword(cameraBuffer, shadowmaskKeyword, shadowmaskExists);
+        bool useDistanceShadowmaks = QualitySettings.shadowmaskMode == ShadowmaskMode.DistanceShadowmask;
+        CoreUtils.SetKeyword(cameraBuffer, shadowmaskKeyword, shadowmaskExists && !useDistanceShadowmaks);
+        CoreUtils.SetKeyword(cameraBuffer, distanceShadowMaskKeyword, shadowmaskExists && useDistanceShadowmaks);
 
         //超过最大光源个数限制时，设置为-1的灯(不存在的灯)
         if ( mainLightExists || cull.visibleLights.Count > maxVisiableLights)
