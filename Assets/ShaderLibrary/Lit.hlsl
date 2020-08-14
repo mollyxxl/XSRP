@@ -19,6 +19,7 @@ CBUFFER_START(UnityPerDraw)
 	float4x4 unity_ObjectToWorld,unity_WorldToObject;
 	float4 unity_LightIndicesOffsetAndCount;   //x：偏移量  y：影响对象的光源数量
 	float4 unity_4LightIndices0,unity_4LightIndices1;
+	float4 unity_ProbesOcclusion;
 	float4 unity_SpecCube0_BoxMin,unity_SpecCube0_BoxMax;
 	float4 unity_SpecCube0_ProbePosition,unity_SpecCube0_HDR;
 	float4 unity_SpecCube1_BoxMin,unity_SpecCube1_BoxMax;
@@ -38,6 +39,13 @@ CBUFFER_END
 //先定义UNITY_MATRIX_M 再引用
 #define UNITY_MATRIX_M  unity_ObjectToWorld
 #define UNITY_MATRIX_I_M unity_WorldToObject
+
+#if !defined(LIGHTMAP_ON)
+	#if defined(_SHADOWMASK)
+		#define SHADOWS_SHADOWMASK
+	#endif
+#endif
+
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/UnityInstancing.hlsl"
 
 UNITY_INSTANCING_BUFFER_START(PerInstance)
@@ -54,6 +62,7 @@ CBUFFER_START(_LightBuffer)
 	float4 _VisibleLightDirectionsOrPositions[MAX_VISIABLE_LIGHTS];
 	float4 _VisibleLightAttenuations[MAX_VISIABLE_LIGHTS];
 	float4 _VisibleLightSpotDirections[MAX_VISIABLE_LIGHTS];
+	float4 _VisibleLightOcclusionMasks[MAX_VISIABLE_LIGHTS];
 CBUFFER_END
 
 CBUFFER_START(_ShadowBuffer)
@@ -92,6 +101,8 @@ SAMPLER(samplerunity_Lightmap);
 TEXTURE2D(unity_DynamicLightmap);
 SAMPLER(samplerunity_DynamicLightmap);
 
+TEXTURE2D(unity_ShadowMask);
+SAMPLER(samplerunity_ShadowMask);
 
 
 float3 BoxProjection (
@@ -191,10 +202,35 @@ float3 SampleLightProbes (LitSurface s) {
 	
 }
 
-float DistanceToCameraSqr (float3 worldPos) {
-	float3 cameraToFragment = worldPos - _WorldSpaceCameraPos;
-	return dot(cameraToFragment, cameraToFragment);
+float RealtimeToBakedShadowsInterpolator(float3 worldPos)
+{
+	float d=distance(worldPos,_WorldSpaceCameraPos);
+	return saturate(d*_GlobalShadowData.y+_GlobalShadowData.z);
 }
+
+float MixRealtimeAndBakedShadowAttenuation(float realtime,float4 bakedShadows,int lightIndex,float3 worldPos)
+{
+	float t = RealtimeToBakedShadowsInterpolator(worldPos);
+	float fadedRealtime= saturate(realtime + t);  // lerp(realtime,1,t);
+	float occlutionMask=_VisibleLightOcclusionMasks[lightIndex];
+	float baked= dot(bakedShadows,occlutionMask);  // bakedShadows.x;
+	bool hasBakedShadows=occlutionMask.x >= 0.0;
+
+	#if defined(_SHADOWMASK)
+		if(hasBakedShadows){
+			return min(fadedRealtime,baked);
+		}
+	#endif
+	
+	return fadedRealtime;
+}
+
+bool SkipRealtimeShadows(float3 worldPos)
+{
+	return RealtimeToBakedShadowsInterpolator(worldPos) >= 1.0;
+}
+
+
 float HardShadowAttenuation (float4 shadowPos, bool cascade = false) {
 	if (cascade) {
 		return SAMPLE_TEXTURE2D_SHADOW(
@@ -228,10 +264,8 @@ float ShadowAttenuation (int index, float3 worldPos) {
 	#elif !defined(_SHADOWS_HARD) && !defined(_SHADOWS_SOFT)
 		return 1.0;
 	#endif
-	if (
-		_ShadowData[index].x <= 0 ||
-		DistanceToCameraSqr(worldPos) > _GlobalShadowData.y
-	) {
+
+	if (_ShadowData[index].x <= 0 ||SkipRealtimeShadows(worldPos)) {
 		return 1.0;
 	}
 	float4 shadowPos = mul(_WorldToShadowMatrices[index], float4(worldPos, 1.0));
@@ -269,7 +303,7 @@ float CascadedShadowAttenuation(float3 worldPos)
 		return 1.0;
 	#endif
 
-	if(DistanceToCameraSqr(worldPos) > _GlobalShadowData.y)
+	if(SkipRealtimeShadows(worldPos))
 	{
 		return 1.0;
 	}
@@ -292,9 +326,9 @@ float CascadedShadowAttenuation(float3 worldPos)
 
 	return lerp(1,attenuation,_CascadedShadowStrength);
 }
-float3 MainLight(LitSurface s)
+
+float3 MainLight(LitSurface s,float shadowAttenuation)
 {
-	float shadowAttenuation=CascadedShadowAttenuation(s.position);
 	float3 lightColor=_VisibleLightColors[0].rgb;
 	float3 lightDirection=_VisibleLightDirectionsOrPositions[0].xyz;
 	//float diffuse=saturate(dot(normal,lightDirection));
@@ -370,6 +404,28 @@ float3 GlobalIllumination(VertexOutput input,LitSurface surface)
 	#endif
 }
 
+float4 BakedShadows(VertexOutput input,LitSurface surface)
+{
+	#if defined(LIGHTMAP_ON)
+		#if defined(_SHADOWMASK)
+			return SAMPLE_TEXTURE2D(unity_ShadowMask,samplerunity_ShadowMask,input.lightmapUV);
+		#endif
+	#elif defined(_SHADOWMASK)
+		if(unity_ProbeVolumeParams.x)  
+		{
+			//LPPV Shadows
+			return SampleProbeOcclusion(
+				TEXTURE3D_PARAM(unity_ProbeVolumeSH, samplerunity_ProbeVolumeSH),
+				surface.position, unity_ProbeVolumeWorldToObject,
+				unity_ProbeVolumeParams.y, unity_ProbeVolumeParams.z,
+				unity_ProbeVolumeMin, unity_ProbeVolumeSizeInv
+			);
+		}
+		return unity_ProbesOcclusion;   //Shadow Probes
+	#endif
+	return 1.0;
+}
+
 VertexOutput LitPassVertex(VertexInput input)
 {
 	VertexOutput output;
@@ -427,11 +483,17 @@ float4 LitPassFragment(VertexOutput input,FRONT_FACE_TYPE isFrontFace:FRONT_FACE
 	#if defined(_PREMULTIPLY_ALPHA)
 		PremultiplyAlpha(surface,albedoAlpha.a);
 	#endif
+
+	float4 bakedShadows=BakedShadows(input,surface);
+
 	//float3 diffuseLight=input.vertexLighting;   //顶点光照
 	float3 color=input.vertexLighting * surface.diffuse;
 
 	#if defined(_CASCADED_SHADOWS_HARD) ||defined(_CASCADED_SHADOWS_SOFT)
-			color+=MainLight(surface);
+			float shadowAttenuation=MixRealtimeAndBakedShadowAttenuation(
+				CascadedShadowAttenuation(surface.position),bakedShadows,0,surface.position
+			);
+			color+=MainLight(surface,shadowAttenuation);
 	#endif
 
 	//for(int i=0;i<MAX_VISIABLE_LIGHTS;i++)
@@ -439,7 +501,9 @@ float4 LitPassFragment(VertexOutput input,FRONT_FACE_TYPE isFrontFace:FRONT_FACE
 	for(int i=0;i<min(unity_LightIndicesOffsetAndCount.y,4);i++)
 	{
 		int lightIndex=unity_4LightIndices0[i];//限制4盏灯，所以只需要unity_4LightIndices0即可
-		float shadowAttenuation=ShadowAttenuation(lightIndex,input.worldPos);
+		float shadowAttenuation=MixRealtimeAndBakedShadowAttenuation(
+				ShadowAttenuation(lightIndex,surface.position),bakedShadows,lightIndex,surface.position
+		);
 		color+=GenericLight(lightIndex,surface,shadowAttenuation);
 	}
 

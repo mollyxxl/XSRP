@@ -20,6 +20,8 @@ public class XPipelineAsset : RenderPipelineAsset
     ShadowMapSize shadowMapSize= ShadowMapSize._1024;
     [SerializeField]
     float shadowDistance = 100f;
+    [SerializeField,Range(0.01f,2f)]
+    float shadowFadeRange = 1f;
     public enum ShadowCascade {
         Zero=0,
         Two=2,
@@ -33,9 +35,10 @@ public class XPipelineAsset : RenderPipelineAsset
 
     [SerializeField,HideInInspector]
     Vector3 fourCascadesSplit = new Vector3(0.067f, 0.2f, 0.467f);
+
     protected override IRenderPipeline InternalCreatePipeline()
     {
         Vector3 shadowCascadeSplit = shadowCascades == ShadowCascade.Four ? fourCascadesSplit : new Vector3(twoCascadesSplit, 0f);
-        return new XPipeline(dynamicBatching,instancing, (int)shadowMapSize,shadowDistance,(int)shadowCascades,shadowCascadeSplit);
+        return new XPipeline(dynamicBatching,instancing, (int)shadowMapSize,shadowDistance,shadowFadeRange,(int)shadowCascades,shadowCascadeSplit);
     }
 }

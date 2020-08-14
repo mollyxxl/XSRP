@@ -41,11 +41,13 @@ public class XPipeline : RenderPipeline
     static int cascadedShadowMapSizeId = Shader.PropertyToID("_CascadedShadowMapSize");
     static int cascadedShadowStrengthId = Shader.PropertyToID("_CascadedShadowStrength");
     static int cascadedCullingSpheresId = Shader.PropertyToID("_CascadeCullingSpheres");
+    static int visibleLightOcclusionMasksId = Shader.PropertyToID("_VisibleLightOcclusionMasks");
 
     const string shadowsSoftKeyWord = "_SHADOWS_SOFT";
     const string shadowsHardKeyWord = "_SHADOWS_HARD";
     const string cascadedShadowsHardKeyword = "_CASCADED_SHADOWS_HARD";
     const string cascadedShadowsSoftKeyword = "_CASCADED_SHADOWS_SOFT";
+    const string shadowmaskKeyword = "_SHADOWMASK";
 
 
     Vector4[] visiableLightColors = new Vector4[maxVisiableLights];
@@ -56,6 +58,15 @@ public class XPipeline : RenderPipeline
     Matrix4x4[] worldToShadowMatrices = new Matrix4x4[maxVisiableLights];
     Matrix4x4[] worldToShadowCascadeMatrices = new Matrix4x4[5];
     Vector4[] cascadedCullingSpheres = new Vector4[4];
+    Vector4[] visibleLightOcclusionMasks = new Vector4[maxVisiableLights];
+
+    static Vector4[] occlusionMasks = {
+        new Vector4(-1f, 0f, 0f, 0f),
+        new Vector4(1f, 0f, 0f, 0f),
+        new Vector4(0f, 1f, 0f, 0f),
+        new Vector4(0f, 0f, 1f, 0f),
+        new Vector4(0f, 0f, 0f, 1f)
+    };
 
     //SpotLight Shadows
     RenderTexture shadowMap,cascadedShadowMap;
@@ -68,6 +79,8 @@ public class XPipeline : RenderPipeline
     Vector3 shadowCascadeSplit;
 
     bool mainLightExists;
+
+    Vector4 globalShadowData;
 
 #if UNITY_EDITOR
     static Lightmapping.RequestLightsDelegate lightmappingLightsDelegate =
@@ -108,7 +121,7 @@ public class XPipeline : RenderPipeline
         };
 #endif
     public  XPipeline(bool dynamicBatching,bool instancing,
-        int shadowMapSize,float shadowDistance,
+        int shadowMapSize,float shadowDistance,float shadowFadeRange,
         int shadowCascades,Vector3 shadowCascadeSplit)
     {
         GraphicsSettings.lightsUseLinearIntensity = true;
@@ -127,6 +140,7 @@ public class XPipeline : RenderPipeline
         }
         this.shadowMapSize = shadowMapSize;
         this.shadowDistance = shadowDistance;
+        globalShadowData.y = 1f / shadowFadeRange;
         this.shadowCascades = shadowCascades;
         this.shadowCascadeSplit = shadowCascadeSplit;
 
@@ -215,6 +229,10 @@ public class XPipeline : RenderPipeline
         cameraBuffer.SetGlobalVectorArray(visiableLightDirectionsOrPositionsId, visiableLightDirectionsOrPositions);
         cameraBuffer.SetGlobalVectorArray(visiableLightAttenuationsId, visiableLightAttenuations);
         cameraBuffer.SetGlobalVectorArray(visiableLightSpotDirectionsId, visiableLightSpotDirections);
+        cameraBuffer.SetGlobalVectorArray(visibleLightOcclusionMasksId, visibleLightOcclusionMasks);
+
+        globalShadowData.z = 1f - cullingParameters.shadowDistance * globalShadowData.y;
+        cameraBuffer.SetGlobalVector(globalShadowDataId, globalShadowData);
 
         context.ExecuteCommandBuffer(cameraBuffer);
         cameraBuffer.Clear();
@@ -237,7 +255,10 @@ public class XPipeline : RenderPipeline
                 RendererConfiguration.PerObjectReflectionProbes|
                 RendererConfiguration.PerObjectLightmaps|
                 RendererConfiguration.PerObjectLightProbe|
-                RendererConfiguration.PerObjectLightProbeProxyVolume;
+                RendererConfiguration.PerObjectLightProbeProxyVolume|
+                RendererConfiguration.PerObjectShadowMask|
+                RendererConfiguration.PerObjectOcclusionProbe|
+                RendererConfiguration.PerObjectOcclusionProbeProxyVolume;
 
         //drawSetting.flags = drawFlags;   //DrawRendererFlags.EnableDynamicBatching;  //动态合批
         drawSetting.sorting.flags = SortFlags.CommonOpaque;
@@ -302,6 +323,7 @@ public class XPipeline : RenderPipeline
     void ConfigureLights()
     {
         mainLightExists = false;
+        bool shadowmaskExists = false;
         shadowTileCount = 0;
         for (int i = 0; i < cull.visibleLights.Count; i++)
         {
@@ -313,6 +335,13 @@ public class XPipeline : RenderPipeline
             Vector4 attenuation = Vector4.zero;
             attenuation.w = 1f;  //不影响其他光源类型
             Vector4 shadow = Vector4.zero;
+
+            LightBakingOutput baking = light.light.bakingOutput;
+            visibleLightOcclusionMasks[i] = occlusionMasks[baking.occlusionMaskChannel + 1];
+            if (baking.lightmapBakeType == LightmapBakeType.Mixed)
+            {
+                shadowmaskExists |= baking.mixedLightingMode == MixedLightingMode.Shadowmask;
+            }
 
             if (light.lightType == LightType.Directional)
             {
@@ -358,6 +387,8 @@ public class XPipeline : RenderPipeline
             shadowData[i] = shadow;
         }
 
+        CoreUtils.SetKeyword(cameraBuffer, shadowmaskKeyword, shadowmaskExists);
+
         //超过最大光源个数限制时，设置为-1的灯(不存在的灯)
         if ( mainLightExists || cull.visibleLights.Count > maxVisiableLights)
         {
@@ -393,9 +424,9 @@ public class XPipeline : RenderPipeline
         float tileSize = shadowMapSize / 2;
         cascadedShadowMap = SetShadowRenderTarget();
         shadowBuffer.BeginSample("Render Shadows");
-        shadowBuffer.SetGlobalVector(
-            globalShadowDataId, new Vector4(0f, shadowDistance * shadowDistance)
-        );
+        //shadowBuffer.SetGlobalVector(
+        //    globalShadowDataId, new Vector4(0f, shadowDistance * shadowDistance)
+        //);
         context.ExecuteCommandBuffer(shadowBuffer);
         shadowBuffer.Clear();
         Light shadowLight = cull.visibleLights[0].light;
@@ -481,10 +512,11 @@ public class XPipeline : RenderPipeline
 
         float tileSize = shadowMapSize / spilt;
         float tileScale = 1f / spilt;
+        globalShadowData.x = tileScale;
         shadowMap = SetShadowRenderTarget();
 
         shadowBuffer.BeginSample("Render Shadows");
-        shadowBuffer.SetGlobalVector(globalShadowDataId, new Vector4(tileScale, shadowDistance * shadowDistance));
+        //shadowBuffer.SetGlobalVector(globalShadowDataId, new Vector4(tileScale, shadowDistance * shadowDistance));
         context.ExecuteCommandBuffer(shadowBuffer);
         shadowBuffer.Clear();
 
