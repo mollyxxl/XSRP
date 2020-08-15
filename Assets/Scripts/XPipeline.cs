@@ -88,6 +88,10 @@ public class XPipeline : RenderPipeline
     Vector4 globalShadowData;
 
     Texture2D ditherTexture;
+    float ditherAnimationFrameDuration;
+    Vector4[] ditherSTs;
+    float lastDitherTime;
+    int ditherSTIndex = -1;
 
 #if UNITY_EDITOR
     static Lightmapping.RequestLightsDelegate lightmappingLightsDelegate =
@@ -128,7 +132,7 @@ public class XPipeline : RenderPipeline
         };
 #endif
     public XPipeline(bool dynamicBatching, bool instancing,
-        Texture2D ditherTexture,
+        Texture2D ditherTexture,float ditherAnimationSpeed,
         int shadowMapSize,float shadowDistance,float shadowFadeRange,
         int shadowCascades,Vector3 shadowCascadeSplit)
     {
@@ -147,6 +151,10 @@ public class XPipeline : RenderPipeline
             drawFlags |= DrawRendererFlags.EnableInstancing;
         }
         this.ditherTexture = ditherTexture;
+        if (ditherAnimationSpeed > 0f&&Application.isPlaying)
+        {
+            ConfigureDitherAnimation(ditherAnimationSpeed);
+        }
 
         this.shadowMapSize = shadowMapSize;
         this.shadowDistance = shadowDistance;
@@ -179,12 +187,46 @@ public class XPipeline : RenderPipeline
     }
     void ConfigureDitherPattern(ScriptableRenderContext context)
     {
-        cameraBuffer.SetGlobalTexture(ditherTextureId, ditherTexture);
-        cameraBuffer.SetGlobalVector(
-            ditherTextureSTId, new Vector4(1f / 64f, 1f / 64f, 0, 0)
-            );
-        context.ExecuteCommandBuffer(cameraBuffer);
-        cameraBuffer.Clear();
+        if (ditherSTIndex < 0)
+        {
+            ditherSTIndex = 0;
+            lastDitherTime = Time.unscaledTime;
+            cameraBuffer.SetGlobalTexture(ditherTextureId, ditherTexture);
+            cameraBuffer.SetGlobalVector(
+                ditherTextureSTId, new Vector4(1f / 64f, 1f / 64f, 0, 0)
+                );
+            context.ExecuteCommandBuffer(cameraBuffer);
+            cameraBuffer.Clear();
+        }
+        else if (ditherAnimationFrameDuration > 0f)
+        {
+            float currentTime = Time.unscaledTime;
+            if (currentTime - lastDitherTime >= ditherAnimationFrameDuration)
+            {
+                lastDitherTime = currentTime;
+                ditherSTIndex = ditherSTIndex < 15 ? ditherSTIndex + 1 : 0;
+                cameraBuffer.SetGlobalVector(
+                    ditherTextureSTId, ditherSTs[ditherSTIndex]
+                );
+            }
+            context.ExecuteCommandBuffer(cameraBuffer);
+            cameraBuffer.Clear();
+        }
+    }
+    void ConfigureDitherAnimation(float ditherAnimationSpeed)
+    {
+        ditherAnimationFrameDuration = 1f / ditherAnimationSpeed;
+        Random.State state = Random.state;
+        Random.InitState(0);
+        for (int i = 0; i < ditherSTs.Length; i++)
+        {
+            ditherSTs[i] = new Vector4(
+                  (i & 1) == 0 ? (1f / 64f) : (-1f / 64f),
+                  (i & 2) == 0 ? (1f / 64f) : (-1f / 64f),
+                   Random.value,Random.value
+                  );
+        }
+        Random.state = state;
     }
     void Render(ScriptableRenderContext context, Camera camera)
     {

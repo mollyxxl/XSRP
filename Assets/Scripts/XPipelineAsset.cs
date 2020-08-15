@@ -19,6 +19,17 @@ public class XPipelineAsset : RenderPipelineAsset
 
     [SerializeField]
     Texture2D ditherTexture = null;
+    [SerializeField,Range(0,120f)]
+    float ditherAnimationSpeed = 30f;
+
+    [SerializeField]
+    bool supportLODCrossFading = true;
+
+    public bool HasLODCrossFading {
+        get {
+            return supportLODCrossFading;
+        }
+    }
 
     [SerializeField]
     ShadowMapSize shadowMapSize= ShadowMapSize._1024;
@@ -32,6 +43,13 @@ public class XPipelineAsset : RenderPipelineAsset
         Two=2,
         Four=4
     };
+
+    public bool HasShadowCascade {
+        get {
+            return shadowCascades != ShadowCascade.Zero;
+        }
+    }
+
     [SerializeField]
     ShadowCascade shadowCascades = ShadowCascade.Four;
     
@@ -46,7 +64,7 @@ public class XPipelineAsset : RenderPipelineAsset
     {
         Vector3 shadowCascadeSplit = shadowCascades == ShadowCascade.Four ? fourCascadesSplit : new Vector3(twoCascadesSplit, 0f);
         return new XPipeline(dynamicBatching,instancing, 
-                ditherTexture,
+                ditherTexture,ditherAnimationSpeed,
                 (int)shadowMapSize,shadowDistance,shadowFadeRange,
                 (int)shadowCascades,shadowCascadeSplit
             );
