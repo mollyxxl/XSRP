@@ -43,6 +43,9 @@ public class XPipeline : RenderPipeline
     static int cascadedCullingSpheresId = Shader.PropertyToID("_CascadeCullingSpheres");
     static int visibleLightOcclusionMasksId = Shader.PropertyToID("_VisibleLightOcclusionMasks");
     static int subtractiveShadowColorId = Shader.PropertyToID("_SubtractiveShadowColor");
+    //LOD 相关
+    static int ditherTextureId = Shader.PropertyToID("_DitherTexture");
+    static int ditherTextureSTId = Shader.PropertyToID("_DitherTexture_ST");
 
     const string shadowsSoftKeyWord = "_SHADOWS_SOFT";
     const string shadowsHardKeyWord = "_SHADOWS_HARD";
@@ -84,6 +87,8 @@ public class XPipeline : RenderPipeline
 
     Vector4 globalShadowData;
 
+    Texture2D ditherTexture;
+
 #if UNITY_EDITOR
     static Lightmapping.RequestLightsDelegate lightmappingLightsDelegate =
         (Light[] inputLights, NativeArray<LightDataGI> outputLights) => {
@@ -122,7 +127,8 @@ public class XPipeline : RenderPipeline
             }
         };
 #endif
-    public  XPipeline(bool dynamicBatching,bool instancing,
+    public XPipeline(bool dynamicBatching, bool instancing,
+        Texture2D ditherTexture,
         int shadowMapSize,float shadowDistance,float shadowFadeRange,
         int shadowCascades,Vector3 shadowCascadeSplit)
     {
@@ -140,6 +146,8 @@ public class XPipeline : RenderPipeline
         {
             drawFlags |= DrawRendererFlags.EnableInstancing;
         }
+        this.ditherTexture = ditherTexture;
+
         this.shadowMapSize = shadowMapSize;
         this.shadowDistance = shadowDistance;
         globalShadowData.y = 1f / shadowFadeRange;
@@ -162,10 +170,21 @@ public class XPipeline : RenderPipeline
     {
         base.Render(renderContext, cameras);
 
+        ConfigureDitherPattern(renderContext);
+
         foreach (var camera in cameras)
         {
             Render(renderContext,camera);
         }
+    }
+    void ConfigureDitherPattern(ScriptableRenderContext context)
+    {
+        cameraBuffer.SetGlobalTexture(ditherTextureId, ditherTexture);
+        cameraBuffer.SetGlobalVector(
+            ditherTextureSTId, new Vector4(1f / 64f, 1f / 64f, 0, 0)
+            );
+        context.ExecuteCommandBuffer(cameraBuffer);
+        cameraBuffer.Clear();
     }
     void Render(ScriptableRenderContext context, Camera camera)
     {

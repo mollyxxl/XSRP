@@ -5,10 +5,12 @@
 
 CBUFFER_START(UnityPerFrame)
 	float4x4 unity_MatrixVP;
+	float4 _DitherTexture_ST;
 CBUFFER_END
 
 CBUFFER_START(UnityPerDraw)
 	float4x4 unity_ObjectToWorld;
+	float4 unity_LODFade;
 CBUFFER_END
 
 CBUFFER_START(UnityPerMaterial)
@@ -22,6 +24,9 @@ CBUFFER_END
 
 TEXTURE2D(_MainTex);
 SAMPLER(sampler_MainTex);
+
+TEXTURE2D(_DitherTexture);
+SAMPLER(sampler_DitherTexture);
 
 //先定义UNITY_MATRIX_M 再引用
 #define UNITY_MATRIX_M  unity_ObjectToWorld
@@ -60,9 +65,24 @@ VertexOutput ShadowCasterPassVertex(VertexInput input)
 	output.uv=TRANSFORM_TEX(input.uv,_MainTex);
 	return output;
 }
+void LODCrossFadeClip(float4 clipPos)
+{
+	float2 ditherUV=TRANSFORM_TEX(clipPos.xy,_DitherTexture);
+	float lodClipBias= SAMPLE_TEXTURE2D(_DitherTexture,sampler_DitherTexture,ditherUV).a;   //(clipPos.y % 16) / 16;
+
+	if(unity_LODFade.x<0.5){
+		lodClipBias=1.0 - lodClipBias;
+	}
+	clip(unity_LODFade.x-lodClipBias);
+}
 float4 ShadowCasterPassFragment(VertexOutput input):SV_TARGET
 {
 	UNITY_SETUP_INSTANCE_ID(input);
+
+	#if defined(LOD_FADE_CROSSFADE)
+		LODCrossFadeClip(input.clipPos);
+	#endif
+
 	#if !defined(_CLIPPING_OFF)
 		float alpha=SAMPLE_TEXTURE2D(_MainTex,sampler_MainTex,input.uv).a;
 		alpha*=UNITY_ACCESS_INSTANCED_PROP(PerInstance,_Color).a;

@@ -37,6 +37,7 @@
            #pragma multi_compile _ LIGHTMAP_ON
            #pragma multi_compile _ DYNAMICLIGHTMAP_ON
            #pragma multi_compile _ _SHADOWMASK _DISTANCE_SHADOWMASK _SUBTRACTIVE_LIGHTING
+           #pragma multi_compile _ LOD_FADE_CROSSFADE
 
            #pragma shader_feature _CLIPPING_ON
            #pragma shader_feature _RECEIVE_SHADOWS
@@ -64,6 +65,7 @@
           // #pragma instancing_options assumeuniformscaling
 
            #pragma shader_feature _CLIPPING_OFF
+           #pragma multi_compile _ LOD_FADE_CROSSFADE
 
            #pragma vertex ShadowCasterPassVertex
            #pragma fragment ShadowCasterPassFragment

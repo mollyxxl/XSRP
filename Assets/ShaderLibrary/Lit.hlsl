@@ -9,6 +9,7 @@
 
 CBUFFER_START(UnityPerFrame)
 	float4x4 unity_MatrixVP;
+	float4 _DitherTexture_ST;
 CBUFFER_END
 
 CBUFFER_START(UnityPerCamera)
@@ -17,6 +18,7 @@ CBUFFER_END
 
 CBUFFER_START(UnityPerDraw)
 	float4x4 unity_ObjectToWorld,unity_WorldToObject;
+	float4 unity_LODFade;
 	float4 unity_LightIndicesOffsetAndCount;   //x：偏移量  y：影响对象的光源数量
 	float4 unity_4LightIndices0,unity_4LightIndices1;
 	float4 unity_ProbesOcclusion;
@@ -105,6 +107,8 @@ SAMPLER(samplerunity_DynamicLightmap);
 TEXTURE2D(unity_ShadowMask);
 SAMPLER(samplerunity_ShadowMask);
 
+TEXTURE2D(_DitherTexture);
+SAMPLER(sampler_DitherTexture);
 
 float3 BoxProjection (
 	float3 direction, float3 position,
@@ -502,9 +506,24 @@ VertexOutput LitPassVertex(VertexInput input)
 	#endif
 	return output;
 }
+void LODCrossFadeClip(float4 clipPos)
+{
+	float2 ditherUV=TRANSFORM_TEX(clipPos.xy,_DitherTexture);
+	float lodClipBias= SAMPLE_TEXTURE2D(_DitherTexture,sampler_DitherTexture,ditherUV).a;   //(clipPos.y % 16) / 16;
+
+	if(unity_LODFade.x<0.5){
+		lodClipBias=1.0 - lodClipBias;
+	}
+	clip(unity_LODFade.x-lodClipBias);
+}
 float4 LitPassFragment(VertexOutput input,FRONT_FACE_TYPE isFrontFace:FRONT_FACE_SEMANTIC):SV_TARGET
 {
 	UNITY_SETUP_INSTANCE_ID(input);
+
+	#if defined(LOD_FADE_CROSSFADE)
+		LODCrossFadeClip(input.clipPos);
+	#endif
+
 	input.normal=normalize(input.normal);
 	input.normal = IS_FRONT_VFACE(isFrontFace, input.normal, -input.normal);
 	
