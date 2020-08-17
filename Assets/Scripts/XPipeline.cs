@@ -93,6 +93,12 @@ public class XPipeline : RenderPipeline
     float lastDitherTime;
     int ditherSTIndex = -1;
 
+    //Post-processing 
+    XPostProcessingStack defaultStack;
+    CommandBuffer postProcessingBufffer = new CommandBuffer() {  name= "Post-Processing"};
+    static int cameraColorTextureId = Shader.PropertyToID("_CameraColorTexture");
+    static int cameraDepthTextureId = Shader.PropertyToID("_CameraDepthTexture");
+
 #if UNITY_EDITOR
     static Lightmapping.RequestLightsDelegate lightmappingLightsDelegate =
         (Light[] inputLights, NativeArray<LightDataGI> outputLights) => {
@@ -131,7 +137,7 @@ public class XPipeline : RenderPipeline
             }
         };
 #endif
-    public XPipeline(bool dynamicBatching, bool instancing,
+    public XPipeline(bool dynamicBatching, bool instancing,XPostProcessingStack defaultStack,
         Texture2D ditherTexture,float ditherAnimationSpeed,
         int shadowMapSize,float shadowDistance,float shadowFadeRange,
         int shadowCascades,Vector3 shadowCascadeSplit)
@@ -150,6 +156,9 @@ public class XPipeline : RenderPipeline
         {
             drawFlags |= DrawRendererFlags.EnableInstancing;
         }
+
+        this.defaultStack = defaultStack;
+
         this.ditherTexture = ditherTexture;
         if (ditherAnimationSpeed > 0f&&Application.isPlaying)
         {
@@ -281,6 +290,19 @@ public class XPipeline : RenderPipeline
         
         context.SetupCameraProperties(camera);  //设置视图投影矩阵
 
+        if (defaultStack) {
+            cameraBuffer.GetTemporaryRT(cameraColorTextureId,
+                camera.pixelWidth, camera.pixelHeight,24
+                );
+            cameraBuffer.GetTemporaryRT(cameraDepthTextureId,
+                camera.pixelWidth,camera.pixelHeight,24,FilterMode.Point, RenderTextureFormat.Depth
+                );
+            cameraBuffer.SetRenderTarget(
+                cameraColorTextureId, RenderBufferLoadAction.DontCare,RenderBufferStoreAction.Store,
+                cameraDepthTextureId,RenderBufferLoadAction.DontCare,RenderBufferStoreAction.Store
+                );
+        }
+
         CameraClearFlags clearFlags = camera.clearFlags;
         cameraBuffer.ClearRenderTarget(
             (clearFlags&CameraClearFlags.Depth) !=0, 
@@ -337,6 +359,16 @@ public class XPipeline : RenderPipeline
         context.DrawRenderers(cull.visibleRenderers, ref drawSetting, filterSettings);
 
         DrawDefaultPipeline(context, camera);
+
+        //Post-Processing
+        if (defaultStack)
+        {
+            defaultStack.Render(postProcessingBufffer,cameraColorTextureId,cameraDepthTextureId);
+            context.ExecuteCommandBuffer(postProcessingBufffer);
+            postProcessingBufffer.Clear();
+            cameraBuffer.ReleaseTemporaryRT(cameraColorTextureId);
+            cameraBuffer.ReleaseTemporaryRT(cameraDepthTextureId);
+        }
 
         cameraBuffer.EndSample("Render Camera");
         context.ExecuteCommandBuffer(cameraBuffer);

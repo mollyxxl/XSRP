@@ -18,6 +18,9 @@ public class XPipelineAsset : RenderPipelineAsset
     }
 
     [SerializeField]
+    XPostProcessingStack defaultStack;
+
+    [SerializeField]
     Texture2D ditherTexture = null;
     [SerializeField,Range(0,120f)]
     float ditherAnimationSpeed = 30f;
@@ -63,7 +66,7 @@ public class XPipelineAsset : RenderPipelineAsset
     protected override IRenderPipeline InternalCreatePipeline()
     {
         Vector3 shadowCascadeSplit = shadowCascades == ShadowCascade.Four ? fourCascadesSplit : new Vector3(twoCascadesSplit, 0f);
-        return new XPipeline(dynamicBatching,instancing, 
+        return new XPipeline(dynamicBatching,instancing, defaultStack,
                 ditherTexture,ditherAnimationSpeed,
                 (int)shadowMapSize,shadowDistance,shadowFadeRange,
                 (int)shadowCascades,shadowCascadeSplit

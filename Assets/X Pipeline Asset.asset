@@ -14,10 +14,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   dynamicBatching: 0
   instancing: 1
+  defaultStack: {fileID: 11400000, guid: fa11d2791759c654bb4692d27c4db0a9, type: 2}
+  ditherTexture: {fileID: 2800000, guid: 88c1a5b6956367e4daaa7dafa3a8a067, type: 3}
+  ditherAnimationSpeed: 26.9
+  supportLODCrossFading: 1
   shadowMapSize: 4096
   shadowDistance: 15
   shadowFadeRange: 1
   shadowCascades: 4
   twoCascadesSplit: 0.25
   fourCascadesSplit: {x: 0.067, y: 0.2, z: 0.467}
-  ditherTexture: {fileID: 2800000, guid: 88c1a5b6956367e4daaa7dafa3a8a067, type: 3}
