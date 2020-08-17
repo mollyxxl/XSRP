@@ -290,7 +290,11 @@ public class XPipeline : RenderPipeline
         
         context.SetupCameraProperties(camera);  //设置视图投影矩阵
 
-        if (defaultStack) {
+        var xPipelineCamera = camera.GetComponent<XPipelineCamera>();
+        XPostProcessingStack activeStack = xPipelineCamera ? 
+            xPipelineCamera.PostProcessingStack : defaultStack;
+
+        if (activeStack) {
             cameraBuffer.GetTemporaryRT(cameraColorTextureId,
                 camera.pixelWidth, camera.pixelHeight,0,FilterMode.Bilinear
                 );
@@ -354,9 +358,9 @@ public class XPipeline : RenderPipeline
         context.DrawRenderers(cull.visibleRenderers, ref drawSetting, filterSettings);
         context.DrawSkybox(camera);
 
-        if (defaultStack) {
+        if (activeStack) {
 
-            defaultStack.RenderAfterOpaque(
+            activeStack.RenderAfterOpaque(
                 postProcessingBufffer,cameraColorTextureId,cameraDepthTextureId,
                 camera.pixelWidth,camera.pixelHeight
                 );
@@ -379,9 +383,9 @@ public class XPipeline : RenderPipeline
         DrawDefaultPipeline(context, camera);
 
         //Post-Processing
-        if (defaultStack)
+        if (activeStack)
         {
-            defaultStack.RenderAfterTransparent(
+            activeStack.RenderAfterTransparent(
                 postProcessingBufffer,cameraColorTextureId,cameraDepthTextureId,
                 camera.pixelWidth,camera.pixelHeight
                 );
