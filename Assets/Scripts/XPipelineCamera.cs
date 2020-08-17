@@ -1,5 +1,5 @@
 ﻿using UnityEngine;
-[RequireComponent(typeof(Camera))]
+[ImageEffectAllowedInSceneView,RequireComponent(typeof(Camera))]
 public class XPipelineCamera : MonoBehaviour
 {
     [SerializeField]
