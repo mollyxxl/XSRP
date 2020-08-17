@@ -6,6 +6,9 @@
 TEXTURE2D(_MainTex);
 SAMPLER(sampler_MainTex);
 
+TEXTURE2D(_DepthTex);
+SAMPLER(sampler_DepthTex);
+
 struct VertexInput{
 	float4 pos:POSITION;
 };
@@ -49,5 +52,20 @@ float4 BlurPassFragment(VertexOutput input):SV_TARGET
 		BlurSample(input.uv, 0.5, -0.5) +
 		BlurSample(input.uv, -0.5, -0.5);
 	return float4(color.rgb * 0.25, 1);
+}
+float4 DepthStripesPassFragment(VertexOutput input):SV_TARGET {
+	float  rawDepth = SAMPLE_DEPTH_TEXTURE(_DepthTex,sampler_DepthTex,input.uv);
+	float depth=LinearEyeDepth(rawDepth,_ZBufferParams);
+	float4 color=SAMPLE_TEXTURE2D(_MainTex,sampler_MainTex,input.uv);
+
+	#if UNITY_REVERSED_Z
+	bool hasDepth=rawDepth !=0;
+	#else
+	bool hasDepth=rawDepth !=1;
+	#endif
+	if(hasDepth){
+		color*=pow(sin(3.14*depth),2.0);
+	}
+	return color ;
 }
 #endif   //XRP_POST_EFFECT_STACK_INCLUDED

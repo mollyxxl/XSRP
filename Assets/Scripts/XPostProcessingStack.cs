@@ -10,10 +10,14 @@ public class XPostProcessingStack : ScriptableObject
     static Material material;
     static int mainTexId = Shader.PropertyToID("_MainTex");
     static int tempTexId = Shader.PropertyToID("_XPostProcessingStackTempTex");
-    enum Pass { Copy,Blur};
+    static int depthTexId = Shader.PropertyToID("_DepthTex");
+    enum Pass { Copy,Blur, DepthStripes };
 
     [SerializeField,Range(0,10)]
     int blurStrength;
+
+    [SerializeField]
+    bool depthStripes;
     static void InitializeStatic() {
         if (fullScreenTriangle)
         {
@@ -34,21 +38,6 @@ public class XPostProcessingStack : ScriptableObject
             name="X Post-Processing Stack material",
             hideFlags= HideFlags.HideAndDontSave
         };
-    }
-    public void Render(CommandBuffer cb,int cameraColorId,int cameraDepthId,
-        int width,int height
-        )
-    {
-        InitializeStatic();
-        if (blurStrength > 0)
-        {
-            Blur(cb, cameraColorId, width, height);
-        }
-        else
-        {
-            Blit(cb, cameraColorId, BuiltinRenderTextureType.CameraTarget);
-        }
-        
     }
 
     void Blur(CommandBuffer cb, int cameraColorId, int width, int height)
@@ -83,7 +72,19 @@ public class XPostProcessingStack : ScriptableObject
         cb.ReleaseTemporaryRT(tempTexId);
         cb.EndSample("Blur");
     }
-
+    void DepthStripes(
+        CommandBuffer cb,int cameraColorId,int cameraDepthId,
+        int width,int height
+        )
+    {
+        cb.BeginSample("Depth Stripes");
+        cb.GetTemporaryRT(tempTexId, width, height);
+        cb.SetGlobalTexture(depthTexId, cameraDepthId);
+        Blit(cb, cameraColorId, tempTexId, Pass.DepthStripes);
+        Blit(cb, tempTexId, cameraColorId);
+        cb.ReleaseTemporaryRT(tempTexId);
+        cb.EndSample("Depth Stripes");
+    }
     void Blit(
         CommandBuffer cb, 
         RenderTargetIdentifier sourceId,RenderTargetIdentifier destinationId,
@@ -100,5 +101,30 @@ public class XPostProcessingStack : ScriptableObject
             RenderBufferStoreAction.Store
             );
         cb.DrawMesh(fullScreenTriangle, Matrix4x4.identity, material, 0, (int)pass);
+    }
+
+    public void RenderAfterOpaque(
+        CommandBuffer cb,int cameraColorId,int cameraDepthId,
+        int width,int height
+        )
+    {
+        InitializeStatic();
+        if (depthStripes) {
+            DepthStripes(cb, cameraColorId, cameraDepthId, width, height);
+        }
+    }
+    public void RenderAfterTransparent(
+        CommandBuffer cb,int cameraColorId, int cameraDepthId,
+        int width,int height
+        )
+    {
+        if (blurStrength > 0)
+        {
+            Blur(cb, cameraColorId, width, height);
+        }
+        else
+        {
+            Blit(cb, cameraColorId, BuiltinRenderTextureType.CameraTarget);
+        }
     }
 }

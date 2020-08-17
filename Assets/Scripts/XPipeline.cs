@@ -354,6 +354,24 @@ public class XPipeline : RenderPipeline
         context.DrawRenderers(cull.visibleRenderers, ref drawSetting, filterSettings);
         context.DrawSkybox(camera);
 
+        if (defaultStack) {
+
+            defaultStack.RenderAfterOpaque(
+                postProcessingBufffer,cameraColorTextureId,cameraDepthTextureId,
+                camera.pixelWidth,camera.pixelHeight
+                );
+            context.ExecuteCommandBuffer(postProcessingBufffer);
+            postProcessingBufffer.Clear();
+            cameraBuffer.SetRenderTarget(
+                    cameraColorTextureId,
+                    RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
+                    cameraDepthTextureId,
+                    RenderBufferLoadAction.Load, RenderBufferStoreAction.Store
+                );
+            context.ExecuteCommandBuffer(cameraBuffer);
+            cameraBuffer.Clear();
+        }
+
         drawSetting.sorting.flags = SortFlags.CommonTransparent;
         filterSettings.renderQueueRange = RenderQueueRange.transparent;
         context.DrawRenderers(cull.visibleRenderers, ref drawSetting, filterSettings);
@@ -363,8 +381,11 @@ public class XPipeline : RenderPipeline
         //Post-Processing
         if (defaultStack)
         {
-            defaultStack.Render(postProcessingBufffer,cameraColorTextureId,cameraDepthTextureId,
-                camera.pixelWidth,camera.pixelHeight);
+            defaultStack.RenderAfterTransparent(
+                postProcessingBufffer,cameraColorTextureId,cameraDepthTextureId,
+                camera.pixelWidth,camera.pixelHeight
+                );
+            
             context.ExecuteCommandBuffer(postProcessingBufffer);
             postProcessingBufffer.Clear();
             cameraBuffer.ReleaseTemporaryRT(cameraColorTextureId);
